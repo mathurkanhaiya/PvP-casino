@@ -1,8 +1,9 @@
 import { Telegraf, Context } from "telegraf";
 import { Message } from "telegraf/types";
-import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, getActiveBets } from "../db.js";
+import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, updateStreaks, getActiveBets } from "../db.js";
 import { betResultMessage, formatBalance } from "../messages.js";
-import { GAMES, GameType } from "../config.js";
+import { rematchKeyboard } from "../keyboards.js";
+import { EMOJI_TO_GAME, GameType } from "../config.js";
 import { esc } from "../escape.js";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
@@ -16,15 +17,7 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
     const emoji = msg.dice.emoji;
     const score = msg.dice.value;
 
-    const emojiToGame: Record<string, GameType> = {
-      "🎲": "dice",
-      "🎯": "darts",
-      "⚽": "football",
-      "🎳": "bowling",
-      "🏀": "basketball",
-    };
-
-    const gameKey = emojiToGame[emoji];
+    const gameKey = EMOJI_TO_GAME[emoji];
     if (!gameKey) return next();
 
     const activeBets = await getActiveBets(ctx.chat.id);
@@ -38,20 +31,13 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
 
     const betId = playerBet.id;
     const isCreator = playerBet.creatorId === ctx.from.id;
-    const isChallenger = playerBet.challengerId === ctx.from.id;
 
     if (isCreator && playerBet.creatorScore !== null) {
-      await ctx.reply("⚠️ You already rolled for this bet\\!", {
-        parse_mode: "MarkdownV2",
-        reply_to_message_id: msg.message_id,
-      });
+      await ctx.reply("⚠️ You already rolled for this bet\\!", { parse_mode: "MarkdownV2", reply_to_message_id: msg.message_id });
       return next();
     }
-    if (isChallenger && playerBet.challengerScore !== null) {
-      await ctx.reply("⚠️ You already rolled for this bet\\!", {
-        parse_mode: "MarkdownV2",
-        reply_to_message_id: msg.message_id,
-      });
+    if (!isCreator && playerBet.challengerScore !== null) {
+      await ctx.reply("⚠️ You already rolled for this bet\\!", { parse_mode: "MarkdownV2", reply_to_message_id: msg.message_id });
       return next();
     }
 
@@ -108,6 +94,7 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
             totalBets: sql`total_bets + 1`,
             totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`,
           }).where(eq(usersTable.telegramId, loserId));
+          await updateStreaks(winnerId, loserId);
         }
       } else {
         // Tie — refund both
@@ -115,23 +102,18 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
         if (updatedBet.challengerId) {
           await updateBalance(updatedBet.challengerId, amount, "refund", `Tie refund bet #${betId}`, betId);
         }
-
-        await db.update(usersTable).set({
-          totalBets: sql`total_bets + 1`,
-          totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`,
-        }).where(eq(usersTable.telegramId, updatedBet.creatorId));
-
+        await db.update(usersTable).set({ totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, updatedBet.creatorId));
         if (updatedBet.challengerId) {
-          await db.update(usersTable).set({
-            totalBets: sql`total_bets + 1`,
-            totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`,
-          }).where(eq(usersTable.telegramId, updatedBet.challengerId));
+          await db.update(usersTable).set({ totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, updatedBet.challengerId));
         }
       }
 
       await ctx.reply(
         betResultMessage(updatedBet, creatorName, challengerName, winnerName, updatedBet.gameType as GameType),
-        { parse_mode: "MarkdownV2" }
+        {
+          parse_mode: "MarkdownV2",
+          ...rematchKeyboard(updatedBet.gameType as GameType, amount, ctx.from.id),
+        }
       );
     } else {
       const waitingFor = isCreator ? "your opponent" : "the bet creator";

@@ -61,7 +61,32 @@ export async function updateBalance(telegramId: number, delta: number, type: str
   return after;
 }
 
-export async function createBet(creatorId: number, gameType: string, amount: number, chatId: number, messageId?: number) {
+/** Update win/loss streaks after a game result */
+export async function updateStreaks(winnerId: number | null, loserId: number | null) {
+  if (winnerId) {
+    const w = await getUserByTelegramId(winnerId);
+    if (w) {
+      const newStreak = ((w as any).currentStreak || 0) + 1;
+      const bestStreak = Math.max((w as any).bestStreak || 0, newStreak);
+      await db.update(usersTable).set({
+        currentStreak: newStreak,
+        bestStreak,
+      } as any).where(eq(usersTable.telegramId, winnerId));
+    }
+  }
+  if (loserId) {
+    await db.update(usersTable).set({ currentStreak: 0 } as any).where(eq(usersTable.telegramId, loserId));
+  }
+}
+
+export async function createBet(
+  creatorId: number,
+  gameType: string,
+  amount: number,
+  chatId: number,
+  messageId?: number,
+  creatorChoice?: string,
+) {
   const expiresAt = new Date(Date.now() + BET_EXPIRY_MINUTES * 60 * 1000);
 
   const inserted = await db.insert(betsTable).values({
@@ -72,7 +97,8 @@ export async function createBet(creatorId: number, gameType: string, amount: num
     chatId,
     messageId: messageId || null,
     expiresAt,
-  }).returning();
+    creatorChoice: creatorChoice || null,
+  } as any).returning();
 
   return inserted[0];
 }
@@ -88,17 +114,7 @@ export async function getActiveBets(chatId: number) {
   ).orderBy(desc(betsTable.createdAt)).limit(10);
 }
 
-export async function updateBetStatus(betId: number, updates: Partial<{
-  status: "pending" | "active" | "completed" | "cancelled" | "expired";
-  challengerId: number;
-  creatorScore: number;
-  challengerScore: number;
-  winnerId: number;
-  creatorDiceMessageId: number;
-  challengerDiceMessageId: number;
-  messageId: number;
-  completedAt: Date;
-}>) {
+export async function updateBetStatus(betId: number, updates: Record<string, any>) {
   await db.update(betsTable).set(updates as any).where(eq(betsTable.id, betId));
 }
 
@@ -164,4 +180,11 @@ export async function getUserRecentBets(telegramId: number, limit = 5) {
   return db.select().from(betsTable).where(
     or(eq(betsTable.creatorId, telegramId), eq(betsTable.challengerId, telegramId))
   ).orderBy(desc(betsTable.createdAt)).limit(limit);
+}
+
+export async function getUserTransactions(telegramId: number, limit = 15) {
+  return db.select().from(transactionsTable)
+    .where(eq(transactionsTable.userId, telegramId))
+    .orderBy(desc(transactionsTable.createdAt))
+    .limit(limit);
 }

@@ -2,7 +2,10 @@ import { pgTable, serial, bigint, text, integer, boolean, timestamp, numeric, pg
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const gameTypeEnum = pgEnum("game_type", ["dice", "darts", "football", "bowling", "basketball", "slots"]);
+export const gameTypeEnum = pgEnum("game_type", [
+  "dice", "darts", "football", "bowling", "basketball",
+  "slots", "coinflip", "rps",
+]);
 export const betStatusEnum = pgEnum("bet_status", ["pending", "active", "completed", "cancelled", "expired"]);
 
 export const usersTable = pgTable("users", {
@@ -17,6 +20,8 @@ export const usersTable = pgTable("users", {
   totalBets: integer("total_bets").notNull().default(0),
   totalWagered: numeric("total_wagered", { precision: 18, scale: 2 }).notNull().default("0"),
   totalWon: numeric("total_won", { precision: 18, scale: 2 }).notNull().default("0"),
+  currentStreak: integer("current_streak").notNull().default(0),
+  bestStreak: integer("best_streak").notNull().default(0),
   isBanned: boolean("is_banned").notNull().default(false),
   banReason: text("ban_reason"),
   isAdmin: boolean("is_admin").notNull().default(false),
@@ -33,6 +38,9 @@ export const betsTable = pgTable("bets", {
   status: betStatusEnum("status").notNull().default("pending"),
   creatorScore: integer("creator_score"),
   challengerScore: integer("challenger_score"),
+  // For coinflip / RPS choices ("heads"/"tails", "rock"/"paper"/"scissors")
+  creatorChoice: text("creator_choice"),
+  challengerChoice: text("challenger_choice"),
   winnerId: bigint("winner_id", { mode: "number" }),
   chatId: bigint("chat_id", { mode: "number" }).notNull(),
   messageId: integer("message_id"),

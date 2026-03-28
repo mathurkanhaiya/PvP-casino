@@ -2,7 +2,8 @@ import { Markup } from "telegraf";
 import { GAMES, BET_AMOUNTS, GameType } from "./config.js";
 import type { Bet, User } from "@workspace/db/schema";
 
-// Personal menus encode userId so only the owner can interact
+// ── Personal menus (owner only — userId encoded) ────────────────────────────
+
 export function mainMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
@@ -14,10 +15,13 @@ export function mainMenuKeyboard(userId: number) {
       Markup.button.callback("🎁 Daily Bonus", `daily_${userId}`),
     ],
     [
+      Markup.button.callback("📜 Wallet", `wallet_${userId}`),
       Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
+    ],
+    [
       Markup.button.callback("❓ Help", `help_${userId}`),
     ],
-    // Quick game shortcuts — go straight to amount selection
+    // Quick game emoji row
     [
       Markup.button.callback("🎲", `game_dice_${userId}`),
       Markup.button.callback("🎯", `game_darts_${userId}`),
@@ -25,16 +29,34 @@ export function mainMenuKeyboard(userId: number) {
       Markup.button.callback("🎳", `game_bowling_${userId}`),
       Markup.button.callback("🏀", `game_basketball_${userId}`),
     ],
+    [
+      Markup.button.callback("🎰", `game_slots_${userId}`),
+      Markup.button.callback("🪙", `game_coinflip_${userId}`),
+      Markup.button.callback("🤜", `game_rps_${userId}`),
+    ],
   ]);
 }
 
 export function gameSelectKeyboard(userId: number) {
-  const gameButtons = Object.entries(GAMES).map(([key, g]) => [
-    Markup.button.callback(`${g.emoji} ${g.name}`, `game_${key}_${userId}`),
-  ]);
-
   return Markup.inlineKeyboard([
-    ...gameButtons,
+    // Row 1: Dice games
+    [
+      Markup.button.callback("🎲 Dice", `game_dice_${userId}`),
+      Markup.button.callback("🎯 Darts", `game_darts_${userId}`),
+    ],
+    [
+      Markup.button.callback("⚽ Football", `game_football_${userId}`),
+      Markup.button.callback("🎳 Bowling", `game_bowling_${userId}`),
+    ],
+    [
+      Markup.button.callback("🏀 Basketball", `game_basketball_${userId}`),
+      Markup.button.callback("🎰 Slots", `game_slots_${userId}`),
+    ],
+    // Row 2: Instant games
+    [
+      Markup.button.callback("🪙 Coin Flip", `game_coinflip_${userId}`),
+      Markup.button.callback("🤜 Rock Paper Scissors", `game_rps_${userId}`),
+    ],
     [Markup.button.callback("❌ Cancel", `cancel_menu_${userId}`)],
   ]);
 }
@@ -56,6 +78,28 @@ export function betAmountKeyboard(gameKey: GameType, userId: number) {
   ]);
 
   return Markup.inlineKeyboard(rows);
+}
+
+// Coin Flip: creator picks side on creation
+export function coinflipPickKeyboard(userId: number) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("🌕 Heads", `cfpick_heads_${userId}`),
+      Markup.button.callback("🌑 Tails", `cfpick_tails_${userId}`),
+    ],
+    [Markup.button.callback("◀️ Back", `play_${userId}`)],
+  ]);
+}
+
+// RPS: players pick after bet is active
+export function rpsPickKeyboard(betId: number) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("🪨 Rock", `rpspick_rock_${betId}`),
+      Markup.button.callback("📄 Paper", `rpspick_paper_${betId}`),
+      Markup.button.callback("✂️ Scissors", `rpspick_scissors_${betId}`),
+    ],
+  ]);
 }
 
 export function acceptBetKeyboard(betId: number) {
@@ -80,6 +124,13 @@ export function activeBetsKeyboard(bets: Bet[], userId: number) {
 
   buttons.push([Markup.button.callback("🎮 Create New Bet", `play_${userId}`)]);
   return Markup.inlineKeyboard(buttons);
+}
+
+export function rematchKeyboard(gameKey: GameType, amount: number, userId: number) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(`🔄 Rematch (${gameKey.toUpperCase()} — 🪙${amount.toLocaleString()})`, `rematch_${gameKey}_${amount}_${userId}`)],
+    [Markup.button.callback("🎮 New Game", `play_${userId}`)],
+  ]);
 }
 
 export function backToMenuKeyboard(userId: number) {

@@ -5,6 +5,7 @@ import { registerPlayHandlers } from "./handlers/play.js";
 import { registerGameHandlers } from "./handlers/game.js";
 import { registerStatsHandlers } from "./handlers/stats.js";
 import { registerAdminHandlers } from "./handlers/admin.js";
+import { registerWalletHandlers } from "./handlers/wallet.js";
 import { expireOldBets } from "./db.js";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -24,6 +25,7 @@ registerPlayHandlers(bot);
 registerGameHandlers(bot);
 registerStatsHandlers(bot);
 registerAdminHandlers(bot);
+registerWalletHandlers(bot);
 
 // Expire stale bets every 5 minutes
 setInterval(async () => {

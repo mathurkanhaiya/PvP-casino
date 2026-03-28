@@ -1,11 +1,13 @@
 export const GAMES = {
+  // ── Telegram dice games ────────────────────────────────
   dice: {
     emoji: "🎲",
     name: "Dice",
-    description: "Roll dice — highest number wins!",
+    description: "Roll the dice — highest number wins!",
     minScore: 1,
     maxScore: 6,
     telegramEmoji: "🎲",
+    isDice: true,
   },
   darts: {
     emoji: "🎯",
@@ -14,34 +16,79 @@ export const GAMES = {
     minScore: 1,
     maxScore: 6,
     telegramEmoji: "🎯",
+    isDice: true,
   },
   football: {
     emoji: "⚽",
     name: "Football",
-    description: "Kick the ball — score or miss?",
+    description: "Kick the ball — highest score wins!",
     minScore: 0,
     maxScore: 5,
     telegramEmoji: "⚽",
+    isDice: true,
   },
   bowling: {
     emoji: "🎳",
     name: "Bowling",
-    description: "Bowl the ball — strike wins!",
+    description: "Bowl the ball — strike (6) wins!",
     minScore: 0,
     maxScore: 6,
     telegramEmoji: "🎳",
+    isDice: true,
   },
   basketball: {
     emoji: "🏀",
     name: "Basketball",
-    description: "Shoot the hoop — swish wins!",
+    description: "Shoot the hoop — swish (5) wins!",
     minScore: 0,
     maxScore: 5,
     telegramEmoji: "🏀",
+    isDice: true,
+  },
+  slots: {
+    emoji: "🎰",
+    name: "Slots",
+    description: "Spin the slot machine — highest spin value wins! Lucky 64 = jackpot!",
+    minScore: 1,
+    maxScore: 64,
+    telegramEmoji: "🎰",
+    isDice: true,
+  },
+  // ── Instant / choice games ─────────────────────────────
+  coinflip: {
+    emoji: "🪙",
+    name: "Coin Flip",
+    description: "Pick Heads or Tails — bot flips instantly when challenger accepts!",
+    minScore: 0,
+    maxScore: 1,
+    telegramEmoji: "",
+    isDice: false,
+  },
+  rps: {
+    emoji: "🤜",
+    name: "Rock Paper Scissors",
+    description: "Pick Rock, Paper, or Scissors — beat your opponent! Classic 3-way showdown.",
+    minScore: 0,
+    maxScore: 1,
+    telegramEmoji: "",
+    isDice: false,
   },
 } as const;
 
 export type GameType = keyof typeof GAMES;
+
+// Dice-based games only (the subset that uses Telegram dice emoji)
+export const DICE_GAMES: GameType[] = ["dice", "darts", "football", "bowling", "basketball", "slots"];
+
+// Mapping from Telegram dice emoji → gameType
+export const EMOJI_TO_GAME: Record<string, GameType> = {
+  "🎲": "dice",
+  "🎯": "darts",
+  "⚽": "football",
+  "🎳": "bowling",
+  "🏀": "basketball",
+  "🎰": "slots",
+};
 
 export const BET_AMOUNTS = [50, 100, 250, 500, 1000, 2500, 5000];
 export const MIN_BET = 10;
