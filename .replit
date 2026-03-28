@@ -30,3 +30,7 @@ timeoutMs = 20000
 
 [userenv.shared]
 ADMIN_IDS = "2139807311"
+CWALLET_BOT = "cctip_bot"
+TG_API_ID = "38239977"
+CASINO_ACCOUNT = "AdsRewardCasino"
+TG_PHONE = "+919992055970"

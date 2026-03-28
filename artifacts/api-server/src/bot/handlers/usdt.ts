@@ -1,17 +1,20 @@
 /**
- * USDT Betting via Cwallet TipBot (@CWalletBot)
+ * USDT Betting via @cctip_bot
  *
  * Flow:
  *  1. Creator runs /usdt → picks game → picks amount → picks side (choice games)
  *  2. Bot creates pending bet and shows tip instruction
- *  3. Creator sends:  /tip <amount> USDT @CASINO_ACCOUNT  in this chat via @CWalletBot
- *  4. Bot detects @CWalletBot confirmation → bet becomes "awaiting_opponent"
+ *  3. Creator sends:  /tip <amount> USDT @CASINO_ACCOUNT  in this chat via @cctip_bot
+ *  4. Bot detects @cctip_bot confirmation → bet becomes "awaiting_opponent"
  *  5. Opponent clicks "Join" → (picks side for choice games) → sees tip instruction
  *  6. Opponent tips → both paid → game resolves (instant) or dice starts
  *  7. Winner is sent payout via userbot tip command  (or admin is notified if userbot offline)
  *
  * Requires bot PRIVACY MODE OFF in groups (@BotFather → /mybots → Bot Settings → Group Privacy → Disable)
- * so the bot can see @CWalletBot messages.
+ * so the bot can see @cctip_bot messages.
+ *
+ * Session setup: admin sends /usdt_setup in DM → bot sends OTP to phone → admin replies with OTP
+ * → bot replies with the TG_SESSION string to add as a secret.
  */
 
 import { Telegraf, Context, Markup } from "telegraf";
@@ -29,7 +32,7 @@ import {
 } from "../config.js";
 import { getOrCreateUser } from "../db.js";
 import { esc } from "../escape.js";
-import { sendUsdtPayout, isUserbotReady } from "../userbot.js";
+import { sendUsdtPayout, isUserbotReady, initiateSetup, provideOtp, isSetupInProgress } from "../userbot.js";
 
 // ── Pending UI state ───────────────────────────────────────────────────────────
 // userId → currently selected game (while user is picking amount)
@@ -40,6 +43,8 @@ const pendingCustom = new Map<number, { game: GameType; chatId: number }>();
 const pendingJoin   = new Map<number, number>();
 // USDT RPS: betId → { creatorChoice?, opponentChoice? }
 const rpsChoices    = new Map<number, { creator?: string; opponent?: string }>();
+// userId → true  (admin is mid-OTP entry for /usdt_setup)
+const pendingSetup  = new Set<number>();
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -445,6 +450,84 @@ function tipInstr(bet: UsdtBet): string {
 // ── Register all handlers ──────────────────────────────────────────────────────
 
 export function registerUsdtHandlers(bot: Telegraf<Context>): void {
+
+  // ── /usdt_setup — in-bot session generator (admin DM only) ──────────────────
+
+  bot.command("usdt_setup", async (ctx) => {
+    if (!ctx.from) return;
+    if (!isAdmin(ctx.from.id)) return;
+    if (!isPrivate(ctx)) {
+      return ctx.reply("⚠️ Use this command in a private DM with the bot.");
+    }
+
+    const apiId   = process.env.TG_API_ID;
+    const apiHash = process.env.TG_API_HASH;
+    const phone   = process.env.TG_PHONE || "+919992055970";
+
+    if (!apiId || !apiHash) {
+      return ctx.reply(
+        "❌ *TG\\_API\\_ID* and *TG\\_API\\_HASH* must be set as env vars first\\.\n\n" +
+        "Add them in the Replit Secrets panel, then send `/usdt_setup` again\\.",
+        { parse_mode: "MarkdownV2" }
+      );
+    }
+
+    if (isUserbotReady()) {
+      return ctx.reply("✅ Userbot is already connected and ready\\! No setup needed\\.", { parse_mode: "MarkdownV2" });
+    }
+
+    if (isSetupInProgress()) {
+      return ctx.reply(
+        "⏳ A setup is already in progress\\. Send the OTP code you received\\.",
+        { parse_mode: "MarkdownV2" }
+      );
+    }
+
+    pendingSetup.add(ctx.from.id);
+    await ctx.reply(
+      `🔐 *USDT Auto\\-Payout Setup*\n\n` +
+      `Sending an OTP to *${esc(phone)}* via Telegram…\n\n` +
+      `When you receive it, reply here with just the code \\(e\\.g\\. *12345*\\)\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+
+    try {
+      const session = await initiateSetup(phone);
+      pendingSetup.delete(ctx.from.id);
+
+      await ctx.reply(
+        `✅ *Session generated successfully\\!*\n\n` +
+        `Add this as a secret named *TG\\_SESSION* in the Replit Secrets panel:\n\n` +
+        `\`${session}\`\n\n` +
+        `_After saving it, restart the bot and auto\\-payouts will be live\\._`,
+        { parse_mode: "MarkdownV2" }
+      );
+    } catch (err: any) {
+      pendingSetup.delete(ctx.from.id);
+      await ctx.reply(
+        `❌ Setup failed: ${esc(err?.message ?? String(err))}`,
+        { parse_mode: "MarkdownV2" }
+      );
+    }
+  });
+
+  // ── OTP interceptor — runs during /usdt_setup flow ───────────────────────────
+
+  bot.on("text", async (ctx, next) => {
+    if (!ctx.from || !isPrivate(ctx)) return next();
+    if (!pendingSetup.has(ctx.from.id)) return next();
+
+    const code = ctx.message.text.trim();
+    if (!/^\d{4,8}$/.test(code)) return next(); // not an OTP
+
+    const delivered = provideOtp(code);
+    if (delivered) {
+      await ctx.reply("✅ Code received\\! Completing login…", { parse_mode: "MarkdownV2" });
+    } else {
+      pendingSetup.delete(ctx.from.id);
+      return next();
+    }
+  });
 
   // ── /usdt command ────────────────────────────────────────────────────────────
 
