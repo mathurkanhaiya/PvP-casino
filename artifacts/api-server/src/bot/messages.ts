@@ -1,5 +1,6 @@
 import { GAMES, GameType, COINS_PER_STAR } from "./config.js";
 import { safeName, esc } from "./escape.js";
+import { levelBadge, levelProgress, MAX_LEVEL } from "./levels.js";
 import type { User, Bet, Transaction } from "@workspace/db/schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,11 +47,17 @@ export function welcomeMessage(user: User) {
     ? `🔥 *Win Streak: ${(user as any).currentStreak}x* \\(Best: ${(user as any).bestStreak}\\)\n`
     : "";
 
+  const xp = (user as any).xp as number ?? 0;
+  const prog = levelProgress(xp);
+  const badge = levelBadge(prog.level);
+  const levelStr = `${badge} Level ${prog.level}`;
+
   return `
 🎰 *PvP Casino* — Welcome back, ${name}\\!
 
 💰 Balance: *${mv2Num(user.balance)}*
-${streak}
+${streak}${levelStr} \\| XP: ${prog.current}/${prog.level >= MAX_LEVEL ? "MAX" : prog.needed}
+
 *🎲 Dice Games* \\(send emoji to play\\)
 \`/dice\` \`/darts\` \`/football\` \`/bowling\` \`/basketball\` \`/slots\`
 
@@ -70,11 +77,14 @@ export function helpMessage() {
 /start — Dashboard & balance
 /play — Pick a game & create a bet
 /bets — Active bets in this chat
-/stats — Your profile & stats
+/mybets — Your active bets \\+ cancel
+/stats — Your profile, level & XP
 /leaderboard — Top players ranking
 /daily — Claim daily bonus \\(🪙500\\)
+/weekly — Claim weekly bonus \\(🪙2,500\\)
 /deposit — Deposit via Telegram Stars
 /wallet — Transaction history
+/refer — Get your referral link
 /help — This message
 
 *🎲 Dice Games* _\\(send emoji after accepting\\)_
@@ -126,12 +136,25 @@ export function profileMessage(user: User, rank: number) {
   const streak = (user as any).currentStreak > 0
     ? `\n🔥 *Win Streak:* ${(user as any).currentStreak} \\(Best: ${(user as any).bestStreak}\\)` : "";
 
+  // Level & XP
+  const xp = (user as any).xp as number ?? 0;
+  const prog = levelProgress(xp);
+  const badge = levelBadge(prog.level);
+  const barFilled = Math.round(prog.pct / 10);
+  const bar = "█".repeat(barFilled) + "░".repeat(10 - barFilled);
+  const levelLine = prog.level >= MAX_LEVEL
+    ? `\n${badge} *Level MAX* \\(${MAX_LEVEL}\\) — Legendary\\!`
+    : `\n${badge} *Level ${prog.level}* \\| XP: ${prog.current}/${prog.needed}\n\`${bar}\` ${prog.pct}%`;
+
+  const refs = (user as any).totalReferrals as number ?? 0;
+  const refLine = refs > 0 ? `\n👥 *Referrals:* ${refs}` : "";
+
   return `
 👤 *Player Profile*
 
 *Name:* ${name}${usernameStr}
 *ID:* \`${user.telegramId}\`
-🏆 *Rank:* \\#${rank}${streak}
+🏆 *Rank:* \\#${rank}${levelLine}${streak}
 
 💰 *Balance:* ${mv2Num(user.balance)}
 📊 *Win Rate:* ${winRate}%
@@ -141,7 +164,7 @@ ${profitEmoji} *Profit / Loss:* ${profitStr}
 ✅ *Wins:* ${user.totalWins}
 ❌ *Losses:* ${user.totalLosses}
 💵 *Total Wagered:* ${mv2Num(user.totalWagered)}
-🏅 *Total Won:* ${mv2Num(user.totalWon)}
+🏅 *Total Won:* ${mv2Num(user.totalWon)}${refLine}
 `.trim();
 }
 

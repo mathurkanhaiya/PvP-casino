@@ -27,6 +27,11 @@ export const usersTable = pgTable("users", {
   totalDeposited: numeric("total_deposited", { precision: 18, scale: 2 }).notNull().default("0"),
   totalWithdrawn: integer("total_withdrawn").notNull().default(0), // in stars
   lastDailyAt: timestamp("last_daily_at"),
+  lastWeeklyAt: timestamp("last_weekly_at"),
+  xp: integer("xp").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  referredBy: bigint("referred_by", { mode: "number" }),
+  totalReferrals: integer("total_referrals").notNull().default(0),
   isBanned: boolean("is_banned").notNull().default(false),
   banReason: text("ban_reason"),
   isAdmin: boolean("is_admin").notNull().default(false),

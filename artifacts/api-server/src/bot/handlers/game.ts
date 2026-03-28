@@ -1,6 +1,6 @@
 import { Telegraf, Context } from "telegraf";
 import { Message } from "telegraf/types";
-import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, updateStreaks, getActiveBets } from "../db.js";
+import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, updateStreaks, getActiveBets, awardTieXP } from "../db.js";
 import { betResultMessage } from "../messages.js";
 import { rematchKeyboard } from "../keyboards.js";
 import { EMOJI_TO_GAME, GameType } from "../config.js";
@@ -106,6 +106,7 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
         if (updatedBet.challengerId) {
           await db.update(usersTable).set({ totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, updatedBet.challengerId));
         }
+        awardTieXP(updatedBet.creatorId, updatedBet.challengerId ?? null);
       }
 
       await ctx.reply(

@@ -548,22 +548,34 @@ async function doStarRefund(ctx: Context, chargeId: string) {
     );
   }
 
-  // Deduct the coins that were granted for this deposit
+  // Deduct the coins that were granted for this deposit (cap at current balance)
   const coinsToDeduct = parseFloat(deposit.coinsAwarded as string);
   const currentBal = parseFloat(user?.balance as string ?? "0");
-  const newBal = Math.max(0, currentBal - coinsToDeduct);
-  await setAdminBalance(deposit.userId, newBal);
+  const actualDeduction = Math.min(coinsToDeduct, currentBal);
+  const newBal = currentBal - actualDeduction;
 
-  // Log the transaction
-  await updateBalance(deposit.userId, -coinsToDeduct, "star_refund" as any,
-    `Stars refund — ${deposit.stars}★ returned`, undefined);
+  // Single atomic balance update + transaction log
+  if (actualDeduction > 0) {
+    await updateBalance(
+      deposit.userId,
+      -actualDeduction,
+      "star_refund",
+      `Stars refund — ${deposit.stars}★ returned`
+    );
+  }
+
+  const newBalDisplay = actualDeduction > 0 ? newBal : currentBal;
+  const partialNote = actualDeduction < coinsToDeduct
+    ? `\n_⚠️ Only ${actualDeduction.toLocaleString()} deducted \\(balance was low\\)_`
+    : "";
 
   await ctx.reply(
-    `✅ *Stars Refunded Successfully\\!*\n\n` +
+    `✅ *Stars Refunded\\!*\n\n` +
     `👤 User: ${userName}\n` +
     `⭐ Stars returned: *${deposit.stars}*\n` +
-    `🪙 Coins deducted: *${mv2Num(coinsToDeduct)}*\n` +
-    `💰 New balance: ${mv2Num(newBal)}`,
+    `🪙 Coins deducted: *${mv2Num(actualDeduction)}*\n` +
+    `💰 New balance: ${mv2Num(newBalDisplay)}` +
+    partialNote,
     { parse_mode: "MarkdownV2", ...backToAdminKeyboard() }
   );
 }

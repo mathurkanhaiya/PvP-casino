@@ -1,7 +1,7 @@
 import { Telegraf, Context, Markup } from "telegraf";
 import {
   getOrCreateUser, getUserByTelegramId, createBet, getBet,
-  updateBetStatus, updateBalance, updateStreaks, getActiveBets,
+  updateBetStatus, updateBalance, updateStreaks, getActiveBets, awardTieXP,
 } from "../db.js";
 import { betCreatedMessage, betActiveMessage, formatBalance, mv2Num } from "../messages.js";
 import {
@@ -680,6 +680,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       if (updatedBet.challengerId) await updateBalance(updatedBet.challengerId, amount, "refund", `RPS tie refund #${betId}`, betId);
       await db.update(usersTable).set({ totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, updatedBet.creatorId));
       if (updatedBet.challengerId) await db.update(usersTable).set({ totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, updatedBet.challengerId));
+      awardTieXP(updatedBet.creatorId, updatedBet.challengerId ?? null);
     }
 
     const { betResultMessage } = await import("../messages.js");

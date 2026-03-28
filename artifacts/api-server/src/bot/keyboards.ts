@@ -65,6 +65,10 @@ export function privateMenuKeyboard(userId: number) {
     ],
     [
       Markup.button.callback("🎁 Daily Bonus",    `daily_${userId}`),
+      Markup.button.callback("🗓 Weekly Bonus",   `weekly_${userId}`),
+    ],
+    [
+      Markup.button.callback("📋 My Active Bets", `my_bets_${userId}`),
       Markup.button.callback("❓ Help",            `help_${userId}`),
     ],
     [
@@ -215,6 +219,26 @@ export function rematchKeyboard(gameKey: GameType, amount: number, userId: numbe
       Markup.button.callback("🏠 Main Menu",  `menu_${userId}`),
     ],
   ]);
+}
+
+export function myBetsKeyboard(bets: Bet[], userId: number) {
+  if (bets.length === 0) {
+    return Markup.inlineKeyboard([
+      [Markup.button.callback("🏠 Back to Menu", `menu_${userId}`)],
+    ]);
+  }
+  const rows = bets.map(bet => {
+    const game = GAMES[bet.gameType as GameType];
+    const amt = Number(bet.amount).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const label = `${game.emoji} ${game.name} 🪙${amt} — ${bet.status === "pending" ? "⏳ Pending" : "⚔️ Active"}`;
+    const canCancel = bet.status === "pending";
+    return canCancel
+      ? [Markup.button.callback(label, `noop_view_${bet.id}`),
+         Markup.button.callback("❌ Cancel", `cancel_my_bet_${bet.id}_${userId}`)]
+      : [Markup.button.callback(label, `noop_view_${bet.id}`)];
+  });
+  rows.push([Markup.button.callback("🏠 Back to Menu", `menu_${userId}`)]);
+  return Markup.inlineKeyboard(rows);
 }
 
 export function backToMenuKeyboard(userId: number) {
