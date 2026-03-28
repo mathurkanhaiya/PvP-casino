@@ -99,7 +99,7 @@ export function helpMessage() {
 1\\. Create a bet \\(game \\+ amount\\)
 2\\. Anyone in the group can accept
 3\\. Play out — winner takes the pot
-4\\. Tie = full refund to both players
+4\\. Tie \\= full refund to both players
 
 *💳 Deposit ⭐ Stars:*
 ⭐ 1 Star \\= 🪙500 coins \\| Min: 1 Star

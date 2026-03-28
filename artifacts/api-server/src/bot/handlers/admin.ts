@@ -176,7 +176,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
 
     pendingAdminActions.set(ctx.from.id, { action: "adjust_balance" });
     await safeEdit(ctx,
-      "💸 *Remove Coins*\n\nSend: `userId amount`\nPositive number = remove that many coins\\.\n\nExample: `123456789 500`",
+      "💸 *Remove Coins*\n\nSend: `userId amount`\nPositive number \\= coins to remove\\.\n\nExample: `123456789 500`",
       { parse_mode: "MarkdownV2", ...backToAdminKeyboard() }
     );
   });
