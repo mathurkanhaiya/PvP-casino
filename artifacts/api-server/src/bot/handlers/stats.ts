@@ -4,11 +4,9 @@ import { profileMessage, leaderboardMessage, formatBalance } from "../messages.j
 import { mainMenuKeyboard, backToMenuKeyboard } from "../keyboards.js";
 import { GAMES, GameType, DAILY_BONUS } from "../config.js";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, transactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { esc } from "../escape.js";
-
-const dailyCooldowns = new Map<number, number>();
 
 async function safeEdit(ctx: Context, text: string, extra: any) {
   try {
@@ -28,6 +26,31 @@ function buildRecentBetsText(recentBets: any[], userId: number): string {
   }).join("\n");
 }
 
+function nextDailyText(lastDailyAt: Date | null): { ready: boolean; text: string } {
+  const now = Date.now();
+  const cooldown = 24 * 60 * 60 * 1000;
+
+  if (!lastDailyAt) return { ready: true, text: "" };
+
+  const lastMs = new Date(lastDailyAt).getTime();
+  const nextMs = lastMs + cooldown;
+
+  if (now >= nextMs) return { ready: true, text: "" };
+
+  const remaining = nextMs - now;
+  const hours = Math.floor(remaining / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+
+  const nextTime = new Date(nextMs);
+  const nextStr = nextTime.toUTCString().replace(" GMT", " UTC");
+
+  return {
+    ready: false,
+    text: `⏰ *Daily Bonus Not Ready*\n\n⌛ Next bonus in: *${hours}h ${minutes}m ${seconds}s*\n📅 Available at: _${esc(nextStr)}_\n\n_Bonuses reset exactly 24 hours after last claim_`,
+  };
+}
+
 export function registerStatsHandlers(bot: Telegraf<Context>) {
   bot.command("stats", async (ctx) => {
     if (!ctx.from) return;
@@ -42,13 +65,10 @@ export function registerStatsHandlers(bot: Telegraf<Context>) {
     });
   });
 
-  // Stats button — only the owner
   bot.action(/^stats_(\d+)$/, async (ctx) => {
     if (!ctx.from) return;
     const ownerId = parseInt(ctx.match[1]);
-    if (ctx.from.id !== ownerId) {
-      return ctx.answerCbQuery("⚠️ Use /stats to view your own stats.", { show_alert: true });
-    }
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Use /stats to view your own stats.", { show_alert: true });
     await ctx.answerCbQuery();
     const stats = await getUserStats(ctx.from.id);
     if (!stats) return;
@@ -68,19 +88,13 @@ export function registerStatsHandlers(bot: Telegraf<Context>) {
     });
   });
 
-  // Leaderboard button — owner only
   bot.action(/^leaderboard_(\d+)$/, async (ctx) => {
     if (!ctx.from) return;
     const ownerId = parseInt(ctx.match[1]);
-    if (ctx.from.id !== ownerId) {
-      return ctx.answerCbQuery("⚠️ Use /leaderboard to view the rankings.", { show_alert: true });
-    }
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Use /leaderboard to view the rankings.", { show_alert: true });
     await ctx.answerCbQuery();
     const users = await getLeaderboard(10);
-    await safeEdit(ctx, leaderboardMessage(users), {
-      parse_mode: "MarkdownV2",
-      ...backToMenuKeyboard(ctx.from.id),
-    });
+    await safeEdit(ctx, leaderboardMessage(users), { parse_mode: "MarkdownV2", ...backToMenuKeyboard(ctx.from.id) });
   });
 
   bot.command("daily", async (ctx) => {
@@ -88,61 +102,57 @@ export function registerStatsHandlers(bot: Telegraf<Context>) {
     await handleDaily(ctx, ctx.from.id, false);
   });
 
-  // Daily button — owner only
   bot.action(/^daily_(\d+)$/, async (ctx) => {
     if (!ctx.from) return;
     const ownerId = parseInt(ctx.match[1]);
-    if (ctx.from.id !== ownerId) {
-      return ctx.answerCbQuery("⚠️ Use /daily to claim your own bonus.", { show_alert: true });
-    }
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Use /daily to claim your own bonus.", { show_alert: true });
     await ctx.answerCbQuery();
     await handleDaily(ctx, ctx.from.id, true);
   });
 }
 
 async function handleDaily(ctx: Context, userId: number, editMode: boolean) {
-  const lastClaim = dailyCooldowns.get(userId);
-  const now = Date.now();
-  const cooldown = 24 * 60 * 60 * 1000;
+  const user = await getOrCreateUser(userId, {});
+  if (user.isBanned) return ctx.reply("🚫 You are banned.");
 
-  if (lastClaim && now - lastClaim < cooldown) {
-    const remaining = cooldown - (now - lastClaim);
-    const hours = Math.floor(remaining / 3600000);
-    const minutes = Math.floor((remaining % 3600000) / 60000);
-    const text = `⏰ *Daily Bonus Not Ready*\n\nCome back in *${hours}h ${minutes}m* for your next bonus\\!`;
+  // Persist cooldown in DB — not in-memory
+  const { ready, text: cooldownText } = nextDailyText((user as any).lastDailyAt);
+
+  if (!ready) {
     if (editMode) {
-      try {
-        await ctx.editMessageText(text, {
-          parse_mode: "MarkdownV2",
-          ...mainMenuKeyboard(userId),
-        });
-      } catch {}
+      await safeEdit(ctx, cooldownText, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
     } else {
-      await ctx.reply(text, { parse_mode: "MarkdownV2" });
+      await ctx.reply(cooldownText, { parse_mode: "MarkdownV2" });
     }
     return;
   }
 
-  const user = await getOrCreateUser(userId, {});
-  if (user.isBanned) return ctx.reply("🚫 You are banned.");
-
   const newBalance = parseFloat(user.balance as string) + DAILY_BONUS;
-  await db.update(usersTable).set({ balance: newBalance.toString() }).where(eq(usersTable.telegramId, userId));
-  dailyCooldowns.set(userId, now);
+  const now = new Date();
 
-  const text = `🎁 *Daily Bonus Claimed\\!*\n\n\\+${formatBalance(DAILY_BONUS)} added to your wallet\\!\n💰 New Balance: ${formatBalance(newBalance)}\n\nCome back tomorrow for more\\! 🎰`;
+  await db.update(usersTable).set({
+    balance: newBalance.toString(),
+    lastDailyAt: now,
+  } as any).where(eq(usersTable.telegramId, userId));
+
+  // Log transaction
+  await db.insert(transactionsTable).values({
+    userId,
+    amount: DAILY_BONUS.toString(),
+    type: "daily_bonus",
+    description: "Daily bonus claimed",
+    balanceBefore: user.balance as string,
+    balanceAfter: newBalance.toString(),
+  });
+
+  const nextClaimTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const nextStr = nextClaimTime.toUTCString().replace(" GMT", " UTC");
+
+  const text = `🎁 *Daily Bonus Claimed\\!*\n\n\\+${formatBalance(DAILY_BONUS)} added to your wallet\\!\n💰 New Balance: ${formatBalance(newBalance)}\n\n⏰ Next bonus: _${esc(nextStr)}_\n\n_Come back in exactly 24 hours\\!_ 🎰`;
 
   if (editMode) {
-    try {
-      await ctx.editMessageText(text, {
-        parse_mode: "MarkdownV2",
-        ...mainMenuKeyboard(userId),
-      });
-    } catch {}
+    await safeEdit(ctx, text, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
   } else {
-    await ctx.reply(text, {
-      parse_mode: "MarkdownV2",
-      ...mainMenuKeyboard(userId),
-    });
+    await ctx.reply(text, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
   }
 }

@@ -7,6 +7,7 @@ export const gameTypeEnum = pgEnum("game_type", [
   "slots", "coinflip", "rps",
 ]);
 export const betStatusEnum = pgEnum("bet_status", ["pending", "active", "completed", "cancelled", "expired"]);
+export const withdrawStatusEnum = pgEnum("withdraw_status", ["pending", "approved", "rejected"]);
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -22,6 +23,9 @@ export const usersTable = pgTable("users", {
   totalWon: numeric("total_won", { precision: 18, scale: 2 }).notNull().default("0"),
   currentStreak: integer("current_streak").notNull().default(0),
   bestStreak: integer("best_streak").notNull().default(0),
+  totalDeposited: numeric("total_deposited", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalWithdrawn: integer("total_withdrawn").notNull().default(0), // in stars
+  lastDailyAt: timestamp("last_daily_at"),
   isBanned: boolean("is_banned").notNull().default(false),
   banReason: text("ban_reason"),
   isAdmin: boolean("is_admin").notNull().default(false),
@@ -38,7 +42,6 @@ export const betsTable = pgTable("bets", {
   status: betStatusEnum("status").notNull().default("pending"),
   creatorScore: integer("creator_score"),
   challengerScore: integer("challenger_score"),
-  // For coinflip / RPS choices ("heads"/"tails", "rock"/"paper"/"scissors")
   creatorChoice: text("creator_choice"),
   challengerChoice: text("challenger_choice"),
   winnerId: bigint("winner_id", { mode: "number" }),
@@ -63,6 +66,28 @@ export const transactionsTable = pgTable("transactions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Stars deposit log (for refund reference)
+export const depositsTable = pgTable("deposits", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  stars: integer("stars").notNull(),
+  coinsAwarded: numeric("coins_awarded", { precision: 18, scale: 2 }).notNull(),
+  telegramChargeId: text("telegram_charge_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Withdrawal requests
+export const withdrawRequestsTable = pgTable("withdraw_requests", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  coinsDeducted: numeric("coins_deducted", { precision: 18, scale: 2 }).notNull(),
+  starsRequested: integer("stars_requested").notNull(),
+  status: withdrawStatusEnum("status").notNull().default("pending"),
+  adminNote: text("admin_note"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, lastActiveAt: true });
 export const insertBetSchema = createInsertSchema(betsTable).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });
@@ -72,3 +97,4 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Bet = typeof betsTable.$inferSelect;
 export type InsertBet = z.infer<typeof insertBetSchema>;
 export type Transaction = typeof transactionsTable.$inferSelect;
+export type WithdrawRequest = typeof withdrawRequestsTable.$inferSelect;
