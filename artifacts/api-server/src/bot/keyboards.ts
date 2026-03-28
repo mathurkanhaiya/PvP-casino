@@ -6,7 +6,7 @@ import type { Bet, User } from "@workspace/db/schema";
 export function mainMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback("🎮 Play Now", `play_${userId}`),
+      Markup.button.callback("🎮 Create Bet", `play_${userId}`),
       Markup.button.callback("📊 My Stats", `stats_${userId}`),
     ],
     [
@@ -16,6 +16,14 @@ export function mainMenuKeyboard(userId: number) {
     [
       Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
       Markup.button.callback("❓ Help", `help_${userId}`),
+    ],
+    // Quick game shortcuts — go straight to amount selection
+    [
+      Markup.button.callback("🎲", `game_dice_${userId}`),
+      Markup.button.callback("🎯", `game_darts_${userId}`),
+      Markup.button.callback("⚽", `game_football_${userId}`),
+      Markup.button.callback("🎳", `game_bowling_${userId}`),
+      Markup.button.callback("🏀", `game_basketball_${userId}`),
     ],
   ]);
 }

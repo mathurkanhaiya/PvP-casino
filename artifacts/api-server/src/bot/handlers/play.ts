@@ -15,7 +15,56 @@ async function safeEdit(ctx: Context, text: string, extra: any) {
   }
 }
 
+/** Shared: validate + create a bet and send the acceptance message */
+async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | undefined) {
+  if (!ctx.from || !ctx.chat) return;
+
+  const user = await getOrCreateUser(ctx.from.id, {
+    username: ctx.from.username,
+    firstName: ctx.from.first_name,
+  });
+
+  if (user.isBanned) {
+    return ctx.reply("🚫 You are banned from this casino.");
+  }
+
+  const game = GAMES[gameKey];
+  if (!game) return ctx.reply("❌ Unknown game.");
+
+  if (!rawAmount || rawAmount.trim() === "") {
+    return ctx.reply(
+      `${game.emoji} *${game.name} — Quick Bet*\n\nUsage: \`/${gameKey} <amount>\`\nExample: \`/${gameKey} 250\`\n\nRange: ${formatBalance(MIN_BET)} — ${formatBalance(MAX_BET)}`,
+      { parse_mode: "MarkdownV2", ...betAmountKeyboard(gameKey, ctx.from.id) }
+    );
+  }
+
+  const amount = parseFloat(rawAmount.trim());
+
+  if (isNaN(amount) || amount < MIN_BET || amount > MAX_BET) {
+    return ctx.reply(
+      `❌ Amount must be between ${formatBalance(MIN_BET)} and ${formatBalance(MAX_BET)}\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+  }
+
+  if (parseFloat(user.balance as string) < amount) {
+    return ctx.reply(
+      `❌ Insufficient balance\\.\nYou need ${formatBalance(amount)} but have ${formatBalance(user.balance)}\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+  }
+
+  const bet = await createBet(ctx.from.id, gameKey, amount, ctx.chat.id);
+  const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
+
+  await ctx.reply(
+    betCreatedMessage(bet, creatorName, gameKey),
+    { parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id) }
+  );
+}
+
 export function registerPlayHandlers(bot: Telegraf<Context>) {
+  // Full play menu
   bot.command("play", async (ctx) => {
     if (!ctx.from) return;
     const user = await getOrCreateUser(ctx.from.id, { username: ctx.from.username, firstName: ctx.from.first_name });
@@ -25,6 +74,14 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       ...gameSelectKeyboard(ctx.from.id),
     });
   });
+
+  // ─── Quick Bet Shortcut Commands ───────────────────────────────────────────
+  bot.command("dice",       ctx => quickBet(ctx, "dice",       ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("darts",      ctx => quickBet(ctx, "darts",      ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("football",   ctx => quickBet(ctx, "football",   ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("bowling",    ctx => quickBet(ctx, "bowling",    ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("basketball", ctx => quickBet(ctx, "basketball", ctx.message.text.split(" ").slice(1).join(" ")));
+  // ────────────────────────────────────────────────────────────────────────────
 
   // play_{userId} — owner only
   bot.action(/^play_(\d+)$/, async (ctx) => {
@@ -40,6 +97,17 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       parse_mode: "MarkdownV2",
       ...gameSelectKeyboard(ctx.from.id),
     });
+  });
+
+  // cancel_menu_{userId}
+  bot.action(/^cancel_menu_(\d+)$/, async (ctx) => {
+    if (!ctx.from) return;
+    const ownerId = parseInt(ctx.match[1]);
+    if (ctx.from.id !== ownerId) {
+      return ctx.answerCbQuery("⚠️ This isn't your menu.", { show_alert: true });
+    }
+    await ctx.answerCbQuery("Cancelled");
+    try { await ctx.deleteMessage(); } catch {}
   });
 
   bot.command("bets", async (ctx) => {

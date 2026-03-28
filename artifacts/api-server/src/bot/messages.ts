@@ -17,17 +17,19 @@ export function welcomeMessage(user: User) {
   return `
 🎰 *Welcome to PvP Casino Bot\\!*
 
-Hello, ${name}\\! You're ready to play\\.
+Hello, ${name}\\! Balance: *${formatBalance(user.balance)}*
 
-💰 *Your Balance:* ${formatBalance(user.balance)}
-🎮 *Games:* 🎲 Dice • 🎯 Darts • ⚽ Football • 🎳 Bowling • 🏀 Basketball
+*🎮 Quick Bet Shortcuts:*
+\`/dice 100\` — 🎲 Dice
+\`/darts 100\` — 🎯 Darts
+\`/football 100\` — ⚽ Football
+\`/bowling 100\` — 🎳 Bowling
+\`/basketball 100\` — 🏀 Basketball
 
-*How it works:*
-→ Create a bet and challenge other players
-→ Both players roll/throw their game emoji
-→ Highest score wins the entire pot\\!
+Replace \`100\` with any amount you want to bet\\.
+Or use the buttons below — tap a game emoji for quick access\\!
 
-Use the buttons below to get started 👇
+🎲 🎯 ⚽ 🎳 🏀
 `.trim();
 }
 
@@ -37,11 +39,16 @@ export function helpMessage() {
 
 *📌 Commands:*
 /start — Main menu & balance
-/play — Create a new bet
-/bets — View active bets in this chat
+/play — Choose game & bet amount
+/dice \\[amount\\] — Quick dice bet
+/darts \\[amount\\] — Quick darts bet
+/football \\[amount\\] — Quick football bet
+/bowling \\[amount\\] — Quick bowling bet
+/basketball \\[amount\\] — Quick basketball bet
+/bets — Active bets in this chat
 /stats — Your stats & history
 /leaderboard — Top players
-/daily — Claim daily bonus \\(${formatBalance(500)}\\)
+/daily — Daily bonus \\(${formatBalance(500)}\\)
 /help — This message
 /adminpanel — Admin panel \\(admins only\\)
 
@@ -53,17 +60,16 @@ export function helpMessage() {
 🏀 *Basketball* — Highest shot \\(0\\-5\\) wins
 
 *💡 How to Play:*
-1\\. Use /play to create a bet
-2\\. Choose a game & bet amount
-3\\. Wait for a challenger to accept
-4\\. Both players send the game emoji
-5\\. Highest score wins the pot\\!
+1\\. Create a bet with /play or a shortcut
+2\\. Wait for someone to tap Accept
+3\\. Both players send the game emoji
+4\\. Highest score wins the full pot\\!
 
 *🎯 Tie:* Both players are fully refunded
 
 *⚠️ Rules:*
-→ Min bet: ${formatBalance(MIN_BET)} \\| Max bet: ${formatBalance(MAX_BET)}
-→ Bets expire after 10 minutes if unchallenged
+→ Min bet: ${formatBalance(MIN_BET)} \\| Max: ${formatBalance(MAX_BET)}
+→ Bets expire after 10 min if unchallenged
 → New players start with ${formatBalance(STARTING_BALANCE)}
 `.trim();
 }
@@ -111,7 +117,7 @@ ${game.emoji} *New PvP Bet Created\\!*
 
 _${esc(game.description)}_
 
-⏱ This bet expires in 10 minutes\\.
+⏱ Expires in 10 minutes\\.
 Tap *Accept* to join the battle\\!
 `.trim();
 }
@@ -127,8 +133,7 @@ ${game.emoji} *PvP Battle Started\\!*
 💰 *Pot:* ${formatBalance(Number(bet.amount) * 2)}
 👤 *${c1}* vs 👤 *${c2}*
 
-🎲 Both players — send the ${game.telegramEmoji} emoji to play\\!
-The bot will automatically detect your scores\\.
+🎲 Both players — send the ${game.telegramEmoji} emoji now\\!
 `.trim();
 }
 
