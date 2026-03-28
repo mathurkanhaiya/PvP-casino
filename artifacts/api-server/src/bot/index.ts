@@ -1,13 +1,15 @@
 import { Telegraf } from "telegraf";
 import { logger } from "../lib/logger.js";
-import { registerStartHandlers } from "./handlers/start.js";
-import { registerPlayHandlers } from "./handlers/play.js";
-import { registerGameHandlers } from "./handlers/game.js";
-import { registerStatsHandlers } from "./handlers/stats.js";
-import { registerAdminHandlers } from "./handlers/admin.js";
-import { registerWalletHandlers } from "./handlers/wallet.js";
+import { registerStartHandlers }   from "./handlers/start.js";
+import { registerPlayHandlers }    from "./handlers/play.js";
+import { registerGameHandlers }    from "./handlers/game.js";
+import { registerStatsHandlers }   from "./handlers/stats.js";
+import { registerAdminHandlers }   from "./handlers/admin.js";
+import { registerWalletHandlers }  from "./handlers/wallet.js";
 import { registerPaymentHandlers } from "./handlers/payment.js";
-import { expireOldBets } from "./db.js";
+import { registerUsdtHandlers }    from "./handlers/usdt.js";
+import { expireOldBets }           from "./db.js";
+import { initUserbot }             from "./userbot.js";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error("TELEGRAM_BOT_TOKEN is required");
@@ -20,7 +22,7 @@ bot.catch((err, ctx) => {
   logger.error({ err, updateType: ctx.updateType }, "Bot error");
 });
 
-// Register all handlers
+// Register all handlers (order matters — more specific first)
 registerStartHandlers(bot);
 registerPlayHandlers(bot);
 registerGameHandlers(bot);
@@ -28,6 +30,7 @@ registerStatsHandlers(bot);
 registerAdminHandlers(bot);
 registerWalletHandlers(bot);
 registerPaymentHandlers(bot);
+registerUsdtHandlers(bot);          // USDT bets via Cwallet TipBot
 
 // Register commands with Telegram so they appear in autocomplete
 bot.telegram.setMyCommands([
@@ -55,6 +58,7 @@ bot.telegram.setMyCommands([
   { command: "deposit",    description: "💳 Deposit via Telegram Stars  —  /deposit 10" },
   { command: "help",       description: "❓ Help & command list" },
   { command: "adminpanel", description: "⚙️ Admin panel (admins only)" },
+  // /usdt is intentionally kept off the public list until USDT_BETA=true
 ]).then(() => {
   logger.info("Bot commands registered with Telegram");
 }).catch((err) => {
@@ -63,11 +67,12 @@ bot.telegram.setMyCommands([
 
 // Expire stale bets every 5 minutes
 setInterval(async () => {
-  try {
-    await expireOldBets();
-  } catch (err) {
+  try { await expireOldBets(); } catch (err) {
     logger.error({ err }, "Error expiring bets");
   }
 }, 5 * 60 * 1000);
+
+// Start GramJS userbot for USDT payouts (non-blocking, optional)
+initUserbot().catch(err => logger.warn({ err }, "Userbot init error"));
 
 export { bot };

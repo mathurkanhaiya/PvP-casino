@@ -89,6 +89,47 @@ export const withdrawRequestsTable = pgTable("withdraw_requests", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ── USDT Bets (Cwallet TipBot) ────────────────────────────────────────────────
+export const usdtBetStatusEnum = pgEnum("usdt_bet_status", [
+  "awaiting_payment",   // creator must tip first
+  "awaiting_opponent",  // creator paid, waiting for someone to join+pay
+  "active",             // both paid, dice game in progress
+  "completed",          // game over, payout sent
+  "cancelled",          // expired / cancelled before both paid
+]);
+
+export const usdtBetsTable = pgTable("usdt_bets", {
+  id:                serial("id").primaryKey(),
+  chatId:            bigint("chat_id",   { mode: "number" }).notNull(),
+  betMessageId:      integer("bet_message_id"),
+  gameType:          gameTypeEnum("game_type").notNull(),
+
+  creatorId:         bigint("creator_id", { mode: "number" }).notNull(),
+  creatorUsername:   text("creator_username"),
+
+  opponentId:        bigint("opponent_id", { mode: "number" }),
+  opponentUsername:  text("opponent_username"),
+
+  usdtAmount:        numeric("usdt_amount",      { precision: 10, scale: 4 }).notNull(),
+  houseFeePercent:   numeric("house_fee_percent", { precision: 5,  scale: 2 }).notNull().default("5.00"),
+
+  status:            usdtBetStatusEnum("status").notNull().default("awaiting_payment"),
+
+  creatorChoice:     text("creator_choice"),
+  opponentChoice:    text("opponent_choice"),
+  creatorScore:      integer("creator_score"),
+  opponentScore:     integer("opponent_score"),
+
+  winnerId:          bigint("winner_id", { mode: "number" }),
+  payoutSent:        boolean("payout_sent").notNull().default(false),
+
+  expiresAt:         timestamp("expires_at"),
+  completedAt:       timestamp("completed_at"),
+  createdAt:         timestamp("created_at").notNull().defaultNow(),
+});
+
+export type UsdtBet = typeof usdtBetsTable.$inferSelect;
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, lastActiveAt: true });
 export const insertBetSchema = createInsertSchema(betsTable).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });

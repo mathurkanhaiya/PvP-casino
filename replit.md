@@ -20,11 +20,35 @@ pnpm workspace monorepo using TypeScript. Contains a Telegram PvP Casino Bot run
 ## Telegram Bot: @AdsRewardGameBot
 
 ### Features
-- **5 PvP Games**: Dice 🎲, Darts 🎯, Football ⚽, Bowling 🎳, Basketball 🏀
-- **Wallet System**: Starting balance 1000 coins, daily bonus, real-time balance tracking
-- **PvP Betting**: Challenge other players, both roll dice — highest score wins pot
-- **Stats & Leaderboard**: Per-player win/loss/profit tracking, global rankings
-- **Admin Panel**: User management, ban/unban, balance control, broadcast, stats
+- **14 PvP Games**: Dice, Darts, Football, Bowling, Basketball, Slots, Coinflip, RPS, High Card, Baccarat, Dragon Tiger, Even/Odd, Lucky 7, Wheel Spin
+- **Coin Betting**: Starting balance 1000 coins, daily bonus, Telegram Stars deposit (1★=500 coins)
+- **USDT Betting** (beta): Real-money bets via Cwallet TipBot (`/usdt` command, admin-only until `USDT_BETA=true`)
+- **Stats & Leaderboard**: Per-player win/loss/profit tracking, global rankings, win streaks
+- **Admin Panel**: `/adminpanel` — user management, ban/unban, balance adjustments (`/add` `/remove`), broadcast
+
+### USDT Bet System (Cwallet TipBot)
+- Command: `/usdt` in a group chat (hidden from public; only admins until `USDT_BETA=true`)
+- Amounts: 0.02, 0.05, 0.10 USDT or custom
+- House fee: 5% (configurable via `USDT_HOUSE_FEE` env var)
+- Flow: create → tip → opponent joins+tips → game plays → winner gets payout via userbot
+- Auto-detection: bot reads @CWalletBot messages (requires privacy mode OFF in groups)
+- Auto-payout: GramJS userbot sends `/tip @winner amount USDT` to @CWalletBot
+- If userbot not configured: admin payout instruction shown in chat
+
+### USDT Env Vars
+| Var | Required | Description |
+|-----|----------|-------------|
+| `USDT_BETA` | No | Set to `"true"` to enable for all users |
+| `CASINO_ACCOUNT` | No | Casino Telegram username (default: `AdsRewardCasino`) |
+| `CWALLET_BOT` | No | CWallet bot username (default: `CWalletBot`) |
+| `TG_API_ID` | Payout | Telegram API ID for userbot |
+| `TG_API_HASH` | Payout | Telegram API hash for userbot |
+| `TG_SESSION` | Payout | GramJS StringSession (run `node scripts/gen-tg-session.mjs` once) |
+| `USDT_HOUSE_FEE` | No | House fee % (default: `5`) |
+
+### Bot Setup: Privacy Mode
+For @CWalletBot tip detection to work, disable the bot's group privacy mode:
+`@BotFather → /mybots → @AdsRewardGameBot → Bot Settings → Group Privacy → Disable`
 
 ### Commands
 - `/start` — Welcome screen & main menu

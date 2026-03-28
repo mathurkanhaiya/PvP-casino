@@ -173,3 +173,18 @@ export const DAILY_BONUS = 500;
 export const ADMIN_IDS: number[] = process.env.ADMIN_IDS
   ? process.env.ADMIN_IDS.split(",").map(Number)
   : [];
+
+// ── USDT Bet config (Cwallet TipBot) ─────────────────────────────────────────
+export const USDT_HOUSE_FEE_PERCENT = parseFloat(process.env.USDT_HOUSE_FEE || "5");
+export const USDT_AMOUNTS = [0.02, 0.05, 0.10] as const; // Quick-pick tiers
+export const USDT_MIN_AMOUNT = 0.02;
+export const USDT_MAX_AMOUNT = 100;
+// Public access flag: "true" = everyone, anything else = admin-only
+export const USDT_PUBLIC = process.env.USDT_BETA === "true";
+// @username of the casino Telegram account that receives the tips
+export const CASINO_ACCOUNT = process.env.CASINO_ACCOUNT || "AdsRewardCasino";
+// @username of the CWallet tip bot
+export const CWALLET_BOT = process.env.CWALLET_BOT || "CWalletBot";
+// USDT bet expiry: 15 minutes for payment, 10 minutes for opponent to join
+export const USDT_PAYMENT_EXPIRY_MINUTES = 15;
+export const USDT_JOIN_EXPIRY_MINUTES    = 30;
