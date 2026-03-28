@@ -1,42 +1,31 @@
 import { Markup } from "telegraf";
-import { GAMES, BET_AMOUNTS, GameType } from "./config.js";
+import { GAMES, BET_AMOUNTS, GameType, WITHDRAW_TIERS, COINS_PER_STAR } from "./config.js";
 import type { Bet, User } from "@workspace/db/schema";
 
-const DEPOSIT_TIERS = [
-  { stars: 10,  coins: 1_000  },
-  { stars: 50,  coins: 5_000  },
-  { stars: 100, coins: 10_000 },
-  { stars: 500, coins: 50_000 },
-];
-const WITHDRAW_TIERS = [
-  { coins: 5_000,  stars: 15  },
-  { coins: 15_000, stars: 45  },
-  { coins: 50_000, stars: 150 },
-];
+// Deposit quick-tiers shown on keyboard (stars)
+const QUICK_DEPOSIT_STARS = [1, 10, 50, 100];
 
 // ── Personal menus (userId encoded — owner only) ─────────────────────────────
 
 export function mainMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback("🎮 Create Bet", `play_${userId}`),
-      Markup.button.callback("📊 My Stats", `stats_${userId}`),
+      Markup.button.callback("🎮 Create Bet",  `play_${userId}`),
+      Markup.button.callback("📊 My Stats",    `stats_${userId}`),
     ],
     [
       Markup.button.callback("🏆 Leaderboard", `leaderboard_${userId}`),
       Markup.button.callback("🎁 Daily Bonus", `daily_${userId}`),
     ],
     [
-      Markup.button.callback("💳 Deposit ⭐", `deposit_menu_${userId}`),
-      Markup.button.callback("💸 Withdraw", `withdraw_menu_${userId}`),
+      Markup.button.callback("💳 Deposit ⭐",  `deposit_menu_${userId}`),
+      Markup.button.callback("💸 Withdraw 🎁",  `withdraw_menu_${userId}`),
     ],
     [
-      Markup.button.callback("📜 Wallet", `wallet_${userId}`),
+      Markup.button.callback("📜 Wallet",      `wallet_${userId}`),
       Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
     ],
-    [
-      Markup.button.callback("❓ Help", `help_${userId}`),
-    ],
+    [Markup.button.callback("❓ Help", `help_${userId}`)],
     // Quick game emoji row — dice games
     [
       Markup.button.callback("🎲", `game_dice_${userId}`),
@@ -57,19 +46,19 @@ export function mainMenuKeyboard(userId: number) {
 export function gameSelectKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback("🎲 Dice", `game_dice_${userId}`),
-      Markup.button.callback("🎯 Darts", `game_darts_${userId}`),
+      Markup.button.callback("🎲 Dice",       `game_dice_${userId}`),
+      Markup.button.callback("🎯 Darts",      `game_darts_${userId}`),
     ],
     [
-      Markup.button.callback("⚽ Football", `game_football_${userId}`),
-      Markup.button.callback("🎳 Bowling", `game_bowling_${userId}`),
+      Markup.button.callback("⚽ Football",   `game_football_${userId}`),
+      Markup.button.callback("🎳 Bowling",    `game_bowling_${userId}`),
     ],
     [
       Markup.button.callback("🏀 Basketball", `game_basketball_${userId}`),
-      Markup.button.callback("🎰 Slots", `game_slots_${userId}`),
+      Markup.button.callback("🎰 Slots",      `game_slots_${userId}`),
     ],
     [
-      Markup.button.callback("🪙 Coin Flip", `game_coinflip_${userId}`),
+      Markup.button.callback("🪙 Coin Flip",          `game_coinflip_${userId}`),
       Markup.button.callback("🤜 Rock Paper Scissors", `game_rps_${userId}`),
     ],
     [Markup.button.callback("❌ Cancel", `cancel_menu_${userId}`)],
@@ -115,7 +104,7 @@ export function rpsPickKeyboard(betId: number) {
 export function acceptBetKeyboard(betId: number) {
   return Markup.inlineKeyboard([
     [Markup.button.callback("✅ Accept Challenge!", `accept_${betId}`)],
-    [Markup.button.callback("❌ Cancel Bet", `cancel_bet_${betId}`)],
+    [Markup.button.callback("❌ Cancel Bet",        `cancel_bet_${betId}`)],
   ]);
 }
 
@@ -147,30 +136,31 @@ export function backToMenuKeyboard(userId: number) {
   ]);
 }
 
-// ── Deposit ──────────────────────────────────────────────────────────────────
+// ── Deposit keyboard ──────────────────────────────────────────────────────────
 
 export function depositMenuKeyboard(userId: number) {
-  const rows = DEPOSIT_TIERS.map(t => [
+  const rows: ReturnType<typeof Markup.button.callback>[][] = QUICK_DEPOSIT_STARS.map(s => [
     Markup.button.callback(
-      `⭐ ${t.stars} Stars → 🪙 ${t.coins.toLocaleString()} coins`,
-      `deposit_${t.stars}stars_${userId}`
+      `⭐ ${s} Star${s > 1 ? "s" : ""} → 🪙 ${(s * COINS_PER_STAR).toLocaleString()} coins`,
+      `deposit_${s}stars_${userId}`
     ),
   ]);
+  rows.push([Markup.button.callback("✏️ Custom Amount", `deposit_custom_${userId}`)]);
   rows.push([Markup.button.callback("🏠 Main Menu", `menu_${userId}`)]);
   return Markup.inlineKeyboard(rows);
 }
 
-// ── Withdraw ─────────────────────────────────────────────────────────────────
+// ── Withdraw keyboard ─────────────────────────────────────────────────────────
 
 export function withdrawMenuKeyboard(balance: string | number, userId: number) {
   const bal = parseFloat(balance as string);
-  const rows = WITHDRAW_TIERS.map(t => {
-    const canAfford = bal >= t.coins;
-    const label = canAfford
-      ? `🪙 ${t.coins.toLocaleString()} → ⭐ ${t.stars} Stars`
-      : `🔒 ${t.coins.toLocaleString()} coins (need more)`;
+  const rows: ReturnType<typeof Markup.button.callback>[][] = WITHDRAW_TIERS.map(t => {
+    const ok = bal >= t.coins;
+    const label = ok
+      ? `🎁 ${t.gifts[0]} — 🪙 ${t.coins.toLocaleString()} → ⭐ ${t.stars}★`
+      : `🔒 Need 🪙 ${t.coins.toLocaleString()} (${t.gifts[0]})`;
     return [
-      canAfford
+      ok
         ? Markup.button.callback(label, `withdraw_${t.coins}coins_${userId}`)
         : Markup.button.callback(label, `deposit_menu_${userId}`),
     ];
@@ -179,29 +169,29 @@ export function withdrawMenuKeyboard(balance: string | number, userId: number) {
   return Markup.inlineKeyboard(rows);
 }
 
-// ── Admin ─────────────────────────────────────────────────────────────────────
+// ── Admin keyboards ───────────────────────────────────────────────────────────
 
 export function adminPanelKeyboard() {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback("👥 User Management", "admin_users"),
-      Markup.button.callback("📊 Bot Stats", "admin_stats"),
+      Markup.button.callback("📊 Bot Stats",        "admin_stats"),
     ],
     [
-      Markup.button.callback("🔍 Find User", "admin_find_user"),
+      Markup.button.callback("🔍 Find User",      "admin_find_user"),
       Markup.button.callback("💰 Adjust Balance", "admin_balance"),
     ],
     [
-      Markup.button.callback("🚫 Ban User", "admin_ban"),
-      Markup.button.callback("✅ Unban User", "admin_unban"),
+      Markup.button.callback("🚫 Ban User",    "admin_ban"),
+      Markup.button.callback("✅ Unban User",  "admin_unban"),
     ],
     [
       Markup.button.callback("👑 Grant Admin", "admin_grant"),
       Markup.button.callback("🏆 Top Players", "admin_top"),
     ],
     [
-      Markup.button.callback("📣 Broadcast", "admin_broadcast"),
-      Markup.button.callback("🗑️ Cancel Old Bets", "admin_cancel_bets"),
+      Markup.button.callback("📣 Broadcast",        "admin_broadcast"),
+      Markup.button.callback("🗑️ Cancel Old Bets",  "admin_cancel_bets"),
     ],
     [
       Markup.button.callback("💸 Withdrawal Requests", "admin_withdrawals"),

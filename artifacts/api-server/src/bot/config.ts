@@ -91,6 +91,25 @@ export const EMOJI_TO_GAME: Record<string, GameType> = {
 };
 
 export const BET_AMOUNTS = [50, 100, 250, 500, 1000, 2500, 5000];
+
+// ── Payment rates ─────────────────────────────────────────────────────────────
+export const COINS_PER_STAR = 500;   // 1 ★ = 500 coins (deposit)
+export const MIN_DEPOSIT_STARS = 1;
+
+export const WITHDRAW_TIERS = [
+  {
+    coins: 10_000,
+    stars: 15,
+    gifts: ["💝 Heart Gift", "🧸 Teddy Bear"],
+    label: "💝 Heart Gift / 🧸 Teddy Bear",
+  },
+  {
+    coins: 25_000,
+    stars: 25,
+    gifts: ["🌹 Rose", "🎁 Gift Box"],
+    label: "🌹 Rose / 🎁 Gift Box",
+  },
+] as const;
 export const MIN_BET = 10;
 export const MAX_BET = 100000;
 export const STARTING_BALANCE = 1000;
