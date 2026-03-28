@@ -11,6 +11,7 @@ Set these in your Railway project dashboard under **Variables**.
 | `SESSION_SECRET` | Any random long string (e.g. 64 random chars) |
 | `ADMIN_IDS` | Your Telegram user ID, e.g. `2139807311` |
 | `PORT` | Set to `8080` (Railway also sets this automatically) |
+| `WEBHOOK_DOMAIN` | **Your Railway public domain** — e.g. `your-casino-bot-production.up.railway.app` (enables webhook mode, much more reliable than polling) |
 
 ## USDT Payouts (auto-payout via @cctip_bot)
 
@@ -34,7 +35,4 @@ Set these in your Railway project dashboard under **Variables**.
 
 ## Database Migration
 
-After first deploy, run this once in Railway's shell or as a one-off command:
-```
-pnpm --filter @workspace/db run migrate
-```
+Migrations run **automatically** on every deploy (the start command runs `push-force` before starting the bot). No manual step needed.
