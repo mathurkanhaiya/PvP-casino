@@ -4,6 +4,8 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { bot } from "./bot/index.js";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const app: Express = express();
 
@@ -23,55 +25,43 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use("/api", router);
 
-// ── Bot startup ──────────────────────────────────────────────────────────────
-const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN;
+// ── DB migration (runs inline at startup — no drizzle-kit needed) ─────────────
+async function runMigrations() {
+  logger.info("Running DB migrations...");
+  await db.execute(sql`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS xp INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "lastWeeklyAt" TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "referredBy" INTEGER;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS "totalReferrals" INTEGER NOT NULL DEFAULT 0;
+  `);
+  logger.info("DB migrations done");
+}
 
+// ── Bot startup ───────────────────────────────────────────────────────────────
 async function startBot() {
-  // Always verify token first
+  // Run migrations first so columns always exist before handlers run
+  await runMigrations();
+
+  // Verify token
   try {
     const me = await bot.telegram.getMe();
-    logger.info({ username: me.username }, "Bot token verified");
+    logger.info({ username: me.username }, "Bot token verified — starting polling");
   } catch (err) {
     logger.error({ err }, "Bot token verification FAILED — check TELEGRAM_BOT_TOKEN");
     return;
   }
 
-  if (WEBHOOK_DOMAIN) {
-    // ── Webhook mode (Railway / production) ──────────────────────────────────
-    logger.info({ domain: WEBHOOK_DOMAIN }, "Starting bot in WEBHOOK mode");
-    try {
-      const webhookMiddleware = await bot.createWebhook({
-        domain: WEBHOOK_DOMAIN,
-        hookPath: "/webhook/telegram",
-      });
-      app.use(webhookMiddleware);
-      logger.info("Webhook registered — bot is live");
-    } catch (err) {
-      logger.error({ err }, "Webhook setup failed — falling back to polling");
-      startPolling();
-    }
-  } else {
-    // ── Long-polling mode (Replit / local dev) ────────────────────────────────
-    startPolling();
-  }
-}
-
-function startPolling() {
-  logger.info("Starting bot in POLLING mode");
-  bot.launch({
-    dropPendingUpdates: false,
-  });
-  // bot.launch() doesn't resolve until stopped, so confirm via separate log
-  setTimeout(() => {
-    logger.info("Bot polling is active and handling updates");
-  }, 2000);
+  // Start long polling (same as always)
+  bot.launch();
+  setTimeout(() => logger.info("Bot polling is active"), 2000);
 }
 
 startBot().catch(err => {
   logger.error({ err }, "Fatal: bot startup failed");
+  process.exit(1);
 });
 
 // Graceful shutdown

@@ -5,4 +5,4 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install -g pnpm@9 && pnpm install --frozen-lockfile"]
 
 [start]
-cmd = "pnpm --filter @workspace/db run push-force && pnpm --filter @workspace/api-server run start"
+cmd = "pnpm --filter @workspace/api-server run start"
