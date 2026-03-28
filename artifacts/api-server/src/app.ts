@@ -26,37 +26,53 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-// ── Bot startup ─────────────────────────────────────────────────────────────
-// When WEBHOOK_DOMAIN is set (Railway / any server with a public HTTPS URL),
-// use webhook mode — Telegram pushes updates directly to this server.
-// When unset (local Replit dev), use long-polling.
-
-const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN; // e.g. your-casino-bot-production.up.railway.app
+// ── Bot startup ──────────────────────────────────────────────────────────────
+const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN;
 
 async function startBot() {
+  // Always verify token first
+  try {
+    const me = await bot.telegram.getMe();
+    logger.info({ username: me.username }, "Bot token verified");
+  } catch (err) {
+    logger.error({ err }, "Bot token verification FAILED — check TELEGRAM_BOT_TOKEN");
+    return;
+  }
+
   if (WEBHOOK_DOMAIN) {
+    // ── Webhook mode (Railway / production) ──────────────────────────────────
+    logger.info({ domain: WEBHOOK_DOMAIN }, "Starting bot in WEBHOOK mode");
     try {
       const webhookMiddleware = await bot.createWebhook({
         domain: WEBHOOK_DOMAIN,
         hookPath: "/webhook/telegram",
       });
       app.use(webhookMiddleware);
-      logger.info({ domain: WEBHOOK_DOMAIN }, "Bot started in webhook mode");
+      logger.info("Webhook registered — bot is live");
     } catch (err) {
-      logger.error({ err }, "Failed to set up webhook — falling back to polling");
-      bot.launch().catch(e => logger.error({ e }, "Polling fallback also failed"));
+      logger.error({ err }, "Webhook setup failed — falling back to polling");
+      startPolling();
     }
   } else {
-    // Local development — long polling
-    bot.launch().then(() => {
-      logger.info("Bot started in polling mode (local dev)");
-    }).catch(err => {
-      logger.error({ err }, "Failed to launch bot in polling mode");
-    });
+    // ── Long-polling mode (Replit / local dev) ────────────────────────────────
+    startPolling();
   }
 }
 
-startBot();
+function startPolling() {
+  logger.info("Starting bot in POLLING mode");
+  bot.launch({
+    dropPendingUpdates: false,
+  });
+  // bot.launch() doesn't resolve until stopped, so confirm via separate log
+  setTimeout(() => {
+    logger.info("Bot polling is active and handling updates");
+  }, 2000);
+}
+
+startBot().catch(err => {
+  logger.error({ err }, "Fatal: bot startup failed");
+});
 
 // Graceful shutdown
 process.once("SIGINT",  () => bot.stop("SIGINT"));

@@ -9,7 +9,6 @@ import { registerWalletHandlers }  from "./handlers/wallet.js";
 import { registerPaymentHandlers } from "./handlers/payment.js";
 import { registerUsdtHandlers }    from "./handlers/usdt.js";
 import { expireOldBets }           from "./db.js";
-import { initUserbot }             from "./userbot.js";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error("TELEGRAM_BOT_TOKEN is required");
@@ -71,8 +70,5 @@ setInterval(async () => {
     logger.error({ err }, "Error expiring bets");
   }
 }, 5 * 60 * 1000);
-
-// Start GramJS userbot for USDT payouts (non-blocking, optional)
-initUserbot().catch(err => logger.warn({ err }, "Userbot init error"));
 
 export { bot };
