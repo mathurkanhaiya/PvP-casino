@@ -1,0 +1,10 @@
+node_modules
+artifacts/api-server/dist
+artifacts/mockup-sandbox
+*.log
+.git
+.replit
+.replit-artifact
+.local
+scripts
+screenshots
