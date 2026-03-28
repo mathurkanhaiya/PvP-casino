@@ -148,7 +148,10 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
 
     const user = await getUserByTelegramId(ctx.from.id);
     await ctx.reply(
-      `✅ *Deposit Successful\\!*\n\n⭐ *${stars} Star${stars > 1 ? "s" : ""}* received\n\\+${mv2Num(coins)} credited instantly\n💰 New Balance: ${mv2Num(user?.balance ?? 0)}\n\nGood luck at the casino\\! 🎰`,
+      `✅ *Deposit Successful\\!*\n\n` +
+      `⭐ *${stars} Star${stars > 1 ? "s" : ""}* → 🪙 *${coins.toLocaleString()} coins*\n` +
+      `💰 New Balance: ${mv2Num(user?.balance ?? 0)}\n\n` +
+      `_Charge ID \\(save for refunds\\):_\n\`${payment.telegram_payment_charge_id}\``,
       { parse_mode: "MarkdownV2", ...backToMenuKeyboard(ctx.from.id) }
     );
     return next();

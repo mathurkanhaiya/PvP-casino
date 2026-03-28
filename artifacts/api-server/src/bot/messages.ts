@@ -1,22 +1,20 @@
-import { GAMES, GameType, MIN_BET, MAX_BET, STARTING_BALANCE } from "./config.js";
+import { GAMES, GameType, COINS_PER_STAR } from "./config.js";
 import { safeName, esc } from "./escape.js";
 import type { User, Bet, Transaction } from "@workspace/db/schema";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Formatting helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function formatBalance(amount: string | number) {
   return `🪙 ${Number(amount).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
-/**
- * Format a number safely for MarkdownV2:
- *  - escapes '.' (decimal point)
- *  - escapes '-' (negative sign)
- *  - escapes ',' is NOT needed (comma isn't special in MV2)
- */
+/** Format a number for MarkdownV2 (escapes . and -) */
 export function mv2Num(amount: string | number): string {
   const n = Number(amount);
   const abs = Math.abs(n);
   const formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  // escape any dots that appear in the formatted number
   const escaped = formatted.replace(/\./g, "\\.");
   const sign = n < 0 ? "\\-" : "";
   return `🪙 ${sign}${escaped}`;
@@ -38,68 +36,81 @@ export function displayName(user: User): string {
   return name || `User#${user.telegramId}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Welcome & Help
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function welcomeMessage(user: User) {
   const name = safeName(user.firstName) || "Player";
-  const streak = (user as any).currentStreak > 1 ? `🔥 *Win Streak: ${(user as any).currentStreak}*\n` : "";
-  return `
-🎰 *Welcome to PvP Casino Bot\\!*
+  const streak = (user as any).currentStreak > 1
+    ? `🔥 *Win Streak: ${(user as any).currentStreak}x* \\(Best: ${(user as any).bestStreak}\\)\n`
+    : "";
 
-Hello, ${name}\\!
+  return `
+🎰 *PvP Casino* — Welcome back, ${name}\\!
+
 💰 Balance: *${mv2Num(user.balance)}*
 ${streak}
-*🎮 Quick Bet Shortcuts:*
-\`/dice 100\` 🎲  \`/darts 100\` 🎯
-\`/football 100\` ⚽  \`/bowling 100\` 🎳
-\`/basketball 100\` 🏀  \`/slots 100\` 🎰
-\`/coinflip 100\` 🪙  \`/rps 100\` 🤜
+*🎲 Dice Games* \\(send emoji to play\\)
+\`/dice\` \`/darts\` \`/football\` \`/bowling\` \`/basketball\` \`/slots\`
 
-Tap a game button or use a shortcut to start\\!
+*⚡ Instant Games* \\(resolved instantly\\)
+\`/coinflip\` \`/rps\` \`/highcard\` \`/baccarat\`
+\`/dragon\` \`/evenodd\` \`/lucky7\` \`/wheel\`
+
+_All commands accept an amount: e\\.g\\. \`/dice 500\`_
 `.trim();
 }
 
 export function helpMessage() {
   return `
-🎰 *PvP Casino Bot — Help*
+🎰 *PvP Casino Bot — Help Guide*
 
-*📌 Commands:*
-/start — Main menu & balance
-/play — Choose game & create bet
-/wallet — Transaction history
+*📌 Main Commands:*
+/start — Dashboard & balance
+/play — Pick a game & create a bet
 /bets — Active bets in this chat
-/stats — Your stats & profile
-/leaderboard — Top players
-/daily — Daily bonus \\(🪙 500\\)
-/deposit — Deposit with Telegram Stars
+/stats — Your profile & stats
+/leaderboard — Top players ranking
+/daily — Claim daily bonus \\(🪙500\\)
+/deposit — Deposit via Telegram Stars
+/wallet — Transaction history
 /help — This message
-/adminpanel — Admin panel \\(admins only\\)
 
-*⚡ Shortcut Commands:*
-/dice /darts /football /bowling /basketball
-/slots /coinflip /rps — all followed by amount
-_Example: \`/slots 500\`_
+*🎲 Dice Games* _\\(send emoji after accepting\\)_
+/dice — Roll 1\\-6, highest wins
+/darts — Bullseye 1\\-6 wins
+/football — Score 0\\-5, highest wins
+/bowling — Strike 0\\-6 wins
+/basketball — Swish 0\\-5 wins
+/slots — Spin 1\\-64, jackpot at 64\\!
 
-*🎮 Dice Games \\(send emoji to play\\):*
-🎲 *Dice* — Roll 1\\-6, highest wins
-🎯 *Darts* — Throw 1\\-6, bullseye wins
-⚽ *Football* — Score 0\\-5, highest wins
-🎳 *Bowling* — Pins 0\\-6, strike wins
-🏀 *Basketball* — Hoops 0\\-5, swish wins
-🎰 *Slots* — Spin 1\\-64, jackpot at 64\\!
+*⚡ Instant Games* _\\(no emoji needed\\)_
+/coinflip — Heads or Tails
+/rps — Rock, Paper, Scissors
+/highcard — Draw 1\\-13, highest wins
+/baccarat — Player vs Banker \\(0\\-9\\)
+/dragon — Dragon or Tiger card game
+/evenodd — Even or Odd dice roll
+/lucky7 — Closest card to 7 wins
+/wheel — Spin 1\\-8, highest wins
 
-*🃏 Instant Games \\(no emoji needed\\):*
-🪙 *Coin Flip* — Pick Heads or Tails; resolved instantly
-🤜 *RPS* — Rock, Paper, or Scissors via buttons
+*💡 How PvP Works:*
+1\\. Create a bet \\(game \\+ amount\\)
+2\\. Anyone in the group can accept
+3\\. Play out — winner takes the pot
+4\\. Tie = full refund to both players
 
-*💡 How PvP works:*
-1\\. Create a bet \\(pick game \\+ amount\\)
-2\\. Share the chat — anyone can accept
-3\\. Play out the game
-4\\. Winner takes the full pot\\!
+*💳 Deposit ⭐ Stars:*
+⭐ 1 Star \\= 🪙500 coins \\| Min: 1 Star
 
-*⚠️ Note:* Bets must be created in a *group chat* so opponents can join\\!
-*🎯 Tie:* Both players are fully refunded
+_Must be in a group chat to create bets_
 `.trim();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile / Stats
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function profileMessage(user: User, rank: number) {
   const winRate = user.totalBets > 0
@@ -124,7 +135,7 @@ export function profileMessage(user: User, rank: number) {
 
 💰 *Balance:* ${mv2Num(user.balance)}
 📊 *Win Rate:* ${winRate}%
-${profitEmoji} *Profit/Loss:* ${profitStr}
+${profitEmoji} *Profit / Loss:* ${profitStr}
 
 🎮 *Total Bets:* ${user.totalBets}
 ✅ *Wins:* ${user.totalWins}
@@ -133,6 +144,10 @@ ${profitEmoji} *Profit/Loss:* ${profitStr}
 🏅 *Total Won:* ${mv2Num(user.totalWon)}
 `.trim();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bet flow
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function betCreatedMessage(bet: Bet, creatorDisplayName: string, gameKey: GameType) {
   const game = GAMES[gameKey];
@@ -144,9 +159,8 @@ export function betCreatedMessage(bet: Bet, creatorDisplayName: string, gameKey:
     evenodd:  { even: "2️⃣ Even", odd: "1️⃣ Odd" },
   };
   const choiceLabel = CHOICE_LABELS[gameKey]?.[bet.creatorChoice || ""] || bet.creatorChoice || "";
-  const choiceNote = choiceLabel
-    ? `\n${game.emoji} Creator picked: *${choiceLabel}*`
-    : "";
+  const choiceNote = choiceLabel ? `\n${game.emoji} Creator picked: *${choiceLabel}*` : "";
+
   const INSTANT_GAMES = ["highcard", "baccarat", "dragon", "evenodd", "lucky7", "wheel"];
   const playNote = game.isDice
     ? `_Both players send ${game.telegramEmoji} after accepting_`
@@ -157,9 +171,9 @@ export function betCreatedMessage(bet: Bet, creatorDisplayName: string, gameKey:
         : `_Coin flips instantly when opponent accepts\\!_`;
 
   return `
-${game.emoji} *New PvP Bet — ${game.name}\\!*
+${game.emoji} *New PvP Bet — ${game.name}*
 
-💰 *Amount:* ${mv2Num(bet.amount)}
+💰 *Bet:* ${mv2Num(bet.amount)} each \\| 🏆 *Pot:* ${mv2Num(Number(bet.amount) * 2)}
 👤 *Creator:* ${safeCreator}${choiceNote}
 
 📖 ${esc(game.description)}
@@ -177,17 +191,17 @@ export function betActiveMessage(bet: Bet, creatorDisplayName: string, challenge
   const instrLine = game.isDice
     ? `🎲 Both players — send the ${game.telegramEmoji} emoji now\\!`
     : gameKey === "rps"
-      ? `🤜 Both players — pick your move below\\!`
+      ? `🤜 Both players — pick your move via the buttons\\!`
       : INSTANT_GAMES2.includes(gameKey)
         ? `${game.emoji} Resolving now\\.\\.\\.`
-        : `🪙 Coin is in the air\\.\\.\\.`;
+        : `🪙 Coin is flipping\\.\\.\\.`;
 
   return `
 ${game.emoji} *PvP Battle Started\\!*
 
 🎮 *Game:* ${game.name}
 💰 *Pot:* ${mv2Num(Number(bet.amount) * 2)}
-👤 *${c1}* vs 👤 *${c2}*
+⚔️ *${c1}* vs *${c2}*
 
 ${instrLine}
 `.trim();
@@ -206,53 +220,53 @@ export function betResultMessage(
   const c2 = esc(challengerDisplayName);
 
   const resultLine = isTie
-    ? "🤝 *It's a tie\\! Both players refunded\\!*"
+    ? "🤝 *It's a Tie\\! Both players refunded\\.*"
     : `🏆 *${esc(winnerDisplayName!)} wins ${mv2Num(Number(bet.amount) * 2)}\\!*`;
 
   const cardStr = (n: number) => n === 1 ? "A" : n === 11 ? "J" : n === 12 ? "Q" : n === 13 ? "K" : `${n}`;
   let scoresLine = "";
+
   if (gameKey === "coinflip") {
-    scoresLine = `🪙 Result: *${bet.creatorScore === 1 ? "🌕 Heads" : "🌑 Tails"}*\n👤 ${c1} picked: ${bet.creatorChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}\n👤 ${c2} picked: ${bet.challengerChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}`;
+    scoresLine = `🪙 Coin: *${bet.creatorScore === 1 ? "🌕 Heads" : "🌑 Tails"}*\n👤 ${c1} → ${bet.creatorChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}\n👤 ${c2} → ${bet.challengerChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}`;
   } else if (gameKey === "rps") {
-    const emojiMap: Record<string, string> = { rock: "🪨", paper: "📄", scissors: "✂️" };
-    scoresLine = `👤 ${c1}: ${emojiMap[bet.creatorChoice || ""] || "?"} ${bet.creatorChoice || "?"}\n👤 ${c2}: ${emojiMap[bet.challengerChoice || ""] || "?"} ${bet.challengerChoice || "?"}`;
+    const emojiMap: Record<string, string> = { rock: "🪨 Rock", paper: "📄 Paper", scissors: "✂️ Scissors" };
+    scoresLine = `👤 ${c1}: *${emojiMap[bet.creatorChoice || ""] || "?"}*\n👤 ${c2}: *${emojiMap[bet.challengerChoice || ""] || "?"}*`;
   } else if (gameKey === "highcard") {
-    scoresLine = `🃏 Cards drawn:\n👤 ${c1}: *${cardStr(bet.creatorScore ?? 0)}* \\(${bet.creatorScore ?? "?"}\\)\n👤 ${c2}: *${cardStr(bet.challengerScore ?? 0)}* \\(${bet.challengerScore ?? "?"}\\)`;
+    scoresLine = `🃏 Cards drawn:\n👤 ${c1}: *${cardStr(bet.creatorScore ?? 0)}* \\(${bet.creatorScore}\\)\n👤 ${c2}: *${cardStr(bet.challengerScore ?? 0)}* \\(${bet.challengerScore}\\)`;
   } else if (gameKey === "baccarat") {
-    const playerLabel = c1 && bet.creatorChoice === "player" ? c1 : c2;
-    const bankerLabel = c1 && bet.creatorChoice === "player" ? c2 : c1;
-    scoresLine = `🀄 *Player: ${bet.creatorScore ?? "?"}* \\| *Banker: ${bet.challengerScore ?? "?"}*\n🎰 ${playerLabel} → Player \\| 🏦 ${bankerLabel} → Banker`;
+    const playerLabel = bet.creatorChoice === "player" ? c1 : c2;
+    const bankerLabel = bet.creatorChoice === "player" ? c2 : c1;
+    scoresLine = `🀄 Player: *${bet.creatorScore ?? "?"}* \\| Banker: *${bet.challengerScore ?? "?"}*\n🎰 ${playerLabel} → Player \\| 🏦 ${bankerLabel} → Banker`;
   } else if (gameKey === "dragon") {
     const card = bet.creatorScore ?? 0;
     const resultSide = card >= 7 ? "🐉 Dragon" : "🐯 Tiger";
-    const pickedC1 = bet.creatorChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger";
-    const pickedC2 = bet.challengerChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger";
-    scoresLine = `🐉 Card drawn: *${card}* → *${resultSide} wins\\!*\n👤 ${c1} → ${pickedC1} \\| 👤 ${c2} → ${pickedC2}`;
+    scoresLine = `🐉 Card drawn: *${card}* → *${resultSide}*\n👤 ${c1} → ${bet.creatorChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger"} \\| 👤 ${c2} → ${bet.challengerChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger"}`;
   } else if (gameKey === "evenodd") {
     const roll = bet.creatorScore ?? 0;
     const parity = roll % 2 === 0 ? "2️⃣ Even" : "1️⃣ Odd";
-    const pickedC1 = bet.creatorChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd";
-    const pickedC2 = bet.challengerChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd";
-    scoresLine = `⚡ Die rolled: *${roll}* → *${parity}\\!*\n👤 ${c1} → ${pickedC1} \\| 👤 ${c2} → ${pickedC2}`;
+    scoresLine = `⚡ Die rolled: *${roll}* → *${parity}*\n👤 ${c1} → ${bet.creatorChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd"} \\| 👤 ${c2} → ${bet.challengerChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd"}`;
   } else if (gameKey === "lucky7") {
     const d1 = Math.abs(7 - (bet.creatorScore ?? 0));
     const d2 = Math.abs(7 - (bet.challengerScore ?? 0));
-    scoresLine = `🔢 Closest to 7:\n👤 ${c1}: *${bet.creatorScore ?? "?"}* \\(Δ${d1}\\)\n👤 ${c2}: *${bet.challengerScore ?? "?"}* \\(Δ${d2}\\)`;
+    scoresLine = `🔢 Closest to 7:\n👤 ${c1}: *${bet.creatorScore ?? "?"}* \\(±${d1}\\)\n👤 ${c2}: *${bet.challengerScore ?? "?"}* \\(±${d2}\\)`;
   } else if (gameKey === "wheel") {
     scoresLine = `🎡 Wheel results:\n👤 ${c1}: *${bet.creatorScore ?? "?"}*\n👤 ${c2}: *${bet.challengerScore ?? "?"}*`;
   } else {
-    scoresLine = `📊 *Scores:*\n👤 ${c1}: *${bet.creatorScore ?? "?"}*\n👤 ${c2}: *${bet.challengerScore ?? "?"}*`;
+    scoresLine = `📊 Scores:\n👤 ${c1}: *${bet.creatorScore ?? "?"}*\n👤 ${c2}: *${bet.challengerScore ?? "?"}*`;
   }
 
   return `
-${game.emoji} *Battle Result\\!*
+${game.emoji} *Game Over — ${game.name}*
 
-🎮 *Game:* ${game.name}
 ${resultLine}
 
 ${scoresLine}
 `.trim();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leaderboard & Wallet
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function leaderboardMessage(users: User[]) {
   const medals = ["🥇", "🥈", "🥉"];
@@ -260,15 +274,15 @@ export function leaderboardMessage(users: User[]) {
     const medal = medals[i] || `${i + 1}\\.`;
     const name = u.username ? `@${esc(u.username)}` : (safeName(u.firstName) || `User\\#${u.telegramId}`);
     const streak = (u as any).bestStreak > 2 ? ` 🔥${(u as any).bestStreak}` : "";
-    return `${medal} *${name}* — ${mv2Num(u.totalWon)} \\(${u.totalWins}W/${u.totalLosses}L\\)${streak}`;
+    return `${medal} *${name}* — ${mv2Num(u.totalWon)} \\(${u.totalWins}W / ${u.totalLosses}L\\)${streak}`;
   }).join("\n");
 
   return `
-🏆 *Casino Leaderboard — Top Players*
+🏆 *Casino Leaderboard*
 
 ${rows || "No players yet\\!"}
 
-_Rankings based on total coins won_
+_Rankings by total coins won_
 `.trim();
 }
 
@@ -279,12 +293,13 @@ export function walletMessage(user: User, txs: Transaction[]) {
   if (txs.length === 0) return header + "_No transactions yet_";
 
   const typeEmoji: Record<string, string> = {
-    bet_placed:      "💸",
-    bet_win:         "🏆",
-    daily_bonus:     "🎁",
-    refund:          "↩️",
-    admin_adjust:    "⚙️",
-    deposit:         "💳",
+    bet_placed:   "💸",
+    bet_win:      "🏆",
+    daily_bonus:  "🎁",
+    refund:       "↩️",
+    admin_adjust: "⚙️",
+    deposit:      "💳",
+    star_refund:  "⭐",
   };
 
   const rows = txs.map(tx => {
@@ -294,22 +309,27 @@ export function walletMessage(user: User, txs: Transaction[]) {
     const amountStr = `${sign}🪙 ${absFormatted}`;
     const emoji = typeEmoji[tx.type] || "💱";
     const desc = tx.description ? ` _${esc(tx.description)}_` : "";
-    const date = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const date = tx.createdAt
+      ? new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : "";
     return `${emoji} ${amountStr}${desc} \\[${esc(date)}\\]`;
   }).join("\n");
 
   return header + rows;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function adminPanelMessage(stats: { users: number; bets: number; volume: number }) {
   return `
 ⚙️ *Admin Control Panel*
 
-📊 *Bot Statistics:*
-👥 Total Users: ${stats.users.toLocaleString()}
-🎮 Total Bets: ${stats.bets.toLocaleString()}
-💰 Total Volume: ${mv2Num(stats.volume)}
+👥 Total Users: *${stats.users.toLocaleString()}*
+🎮 Total Bets: *${stats.bets.toLocaleString()}*
+💰 Total Volume: *${mv2Num(stats.volume)}*
 
-*Use the buttons below to manage the bot:*
+_Select an action below:_
 `.trim();
 }

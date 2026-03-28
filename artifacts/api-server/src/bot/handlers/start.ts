@@ -71,6 +71,11 @@ export function registerStartHandlers(bot: Telegraf<Context>) {
     });
   });
 
+  // Section-header buttons (non-interactive labels in keyboards)
+  bot.action(/^noop_/, async (ctx) => {
+    await ctx.answerCbQuery();
+  });
+
   // Cancel personal menu
   bot.action(/^cancel_menu_(\d+)$/, async (ctx) => {
     if (!ctx.from) return;
