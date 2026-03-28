@@ -2,49 +2,49 @@ import { Markup } from "telegraf";
 import { GAMES, BET_AMOUNTS, GameType } from "./config.js";
 import type { Bet, User } from "@workspace/db/schema";
 
-export function mainMenuKeyboard() {
+// Personal menus encode userId so only the owner can interact
+export function mainMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback("🎮 Play Now", "play"),
-      Markup.button.callback("📊 My Stats", "stats"),
+      Markup.button.callback("🎮 Play Now", `play_${userId}`),
+      Markup.button.callback("📊 My Stats", `stats_${userId}`),
     ],
     [
-      Markup.button.callback("🏆 Leaderboard", "leaderboard"),
-      Markup.button.callback("🎁 Daily Bonus", "daily"),
+      Markup.button.callback("🏆 Leaderboard", `leaderboard_${userId}`),
+      Markup.button.callback("🎁 Daily Bonus", `daily_${userId}`),
     ],
     [
-      Markup.button.callback("🎲 Active Bets", "active_bets"),
-      Markup.button.callback("❓ Help", "help"),
+      Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
+      Markup.button.callback("❓ Help", `help_${userId}`),
     ],
   ]);
 }
 
-export function gameSelectKeyboard() {
+export function gameSelectKeyboard(userId: number) {
   const gameButtons = Object.entries(GAMES).map(([key, g]) => [
-    Markup.button.callback(`${g.emoji} ${g.name}`, `game_${key}`),
+    Markup.button.callback(`${g.emoji} ${g.name}`, `game_${key}_${userId}`),
   ]);
 
   return Markup.inlineKeyboard([
     ...gameButtons,
-    [Markup.button.callback("❌ Cancel", "cancel")],
+    [Markup.button.callback("❌ Cancel", `cancel_menu_${userId}`)],
   ]);
 }
 
-export function betAmountKeyboard(gameKey: GameType) {
+export function betAmountKeyboard(gameKey: GameType, userId: number) {
   const rows: ReturnType<typeof Markup.button.callback>[][] = [];
-  const amounts = BET_AMOUNTS;
 
-  for (let i = 0; i < amounts.length; i += 3) {
+  for (let i = 0; i < BET_AMOUNTS.length; i += 3) {
     rows.push(
-      amounts.slice(i, i + 3).map(a =>
-        Markup.button.callback(`🪙 ${a.toLocaleString()}`, `bet_${gameKey}_${a}`)
+      BET_AMOUNTS.slice(i, i + 3).map(a =>
+        Markup.button.callback(`🪙 ${a.toLocaleString()}`, `bet_${gameKey}_${a}_${userId}`)
       )
     );
   }
 
   rows.push([
-    Markup.button.callback("✏️ Custom Amount", `bet_${gameKey}_custom`),
-    Markup.button.callback("◀️ Back", "play"),
+    Markup.button.callback("✏️ Custom Amount", `betcustom_${gameKey}_${userId}`),
+    Markup.button.callback("◀️ Back", `play_${userId}`),
   ]);
 
   return Markup.inlineKeyboard(rows);
@@ -52,18 +52,16 @@ export function betAmountKeyboard(gameKey: GameType) {
 
 export function acceptBetKeyboard(betId: number) {
   return Markup.inlineKeyboard([
-    [
-      Markup.button.callback("✅ Accept Challenge!", `accept_${betId}`),
-    ],
-    [
-      Markup.button.callback("❌ Cancel", `cancel_bet_${betId}`),
-    ],
+    [Markup.button.callback("✅ Accept Challenge!", `accept_${betId}`)],
+    [Markup.button.callback("❌ Cancel Bet", `cancel_bet_${betId}`)],
   ]);
 }
 
-export function activeBetsKeyboard(bets: Bet[], currentUserId: number) {
+export function activeBetsKeyboard(bets: Bet[], userId: number) {
   if (bets.length === 0) {
-    return Markup.inlineKeyboard([[Markup.button.callback("🎮 Create a Bet", "play")]]);
+    return Markup.inlineKeyboard([
+      [Markup.button.callback("🎮 Create a Bet", `play_${userId}`)],
+    ]);
   }
 
   const buttons = bets.map(bet => {
@@ -72,8 +70,14 @@ export function activeBetsKeyboard(bets: Bet[], currentUserId: number) {
     return [Markup.button.callback(label, `view_bet_${bet.id}`)];
   });
 
-  buttons.push([Markup.button.callback("🎮 Create New Bet", "play")]);
+  buttons.push([Markup.button.callback("🎮 Create New Bet", `play_${userId}`)]);
   return Markup.inlineKeyboard(buttons);
+}
+
+export function backToMenuKeyboard(userId: number) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("🏠 Main Menu", `menu_${userId}`)],
+  ]);
 }
 
 export function adminPanelKeyboard() {
@@ -96,7 +100,7 @@ export function adminPanelKeyboard() {
     ],
     [
       Markup.button.callback("📣 Broadcast", "admin_broadcast"),
-      Markup.button.callback("🗑️ Cancel All Bets", "admin_cancel_bets"),
+      Markup.button.callback("🗑️ Cancel Old Bets", "admin_cancel_bets"),
     ],
   ]);
 }
@@ -104,20 +108,20 @@ export function adminPanelKeyboard() {
 export function userManagementKeyboard(user: User) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback(user.isBanned ? "✅ Unban" : "🚫 Ban", user.isBanned ? `admin_do_unban_${user.telegramId}` : `admin_do_ban_${user.telegramId}`),
-      Markup.button.callback(user.isAdmin ? "Remove Admin" : "Grant Admin", user.isAdmin ? `admin_revoke_${user.telegramId}` : `admin_grant_${user.telegramId}`),
+      Markup.button.callback(
+        user.isBanned ? "✅ Unban" : "🚫 Ban",
+        user.isBanned ? `admin_do_unban_${user.telegramId}` : `admin_do_ban_${user.telegramId}`
+      ),
+      Markup.button.callback(
+        user.isAdmin ? "Remove Admin" : "Grant Admin",
+        user.isAdmin ? `admin_revoke_${user.telegramId}` : `admin_grant_${user.telegramId}`
+      ),
     ],
     [
       Markup.button.callback("💰 Set Balance", `admin_set_bal_${user.telegramId}`),
       Markup.button.callback("💸 Add Balance", `admin_add_bal_${user.telegramId}`),
     ],
     [Markup.button.callback("◀️ Back to Admin", "admin_panel")],
-  ]);
-}
-
-export function backToMenuKeyboard() {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback("🏠 Main Menu", "start")],
   ]);
 }
 

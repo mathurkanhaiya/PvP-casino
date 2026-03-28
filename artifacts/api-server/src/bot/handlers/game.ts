@@ -3,12 +3,12 @@ import { Message } from "telegraf/types";
 import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, getActiveBets } from "../db.js";
 import { betResultMessage, formatBalance } from "../messages.js";
 import { GAMES, GameType } from "../config.js";
+import { esc } from "../escape.js";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export function registerGameHandlers(bot: Telegraf<Context>) {
-  // Handle dice/game emoji messages
   bot.on("message", async (ctx, next) => {
     const msg = ctx.message as Message.DiceMessage;
     if (!msg.dice || !ctx.from || !ctx.chat) return next();
@@ -16,7 +16,6 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
     const emoji = msg.dice.emoji;
     const score = msg.dice.value;
 
-    // Map emoji to game type
     const emojiToGame: Record<string, GameType> = {
       "🎲": "dice",
       "🎯": "darts",
@@ -28,7 +27,6 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
     const gameKey = emojiToGame[emoji];
     if (!gameKey) return next();
 
-    // Find an active bet in this chat where this player is involved
     const activeBets = await getActiveBets(ctx.chat.id);
     const playerBet = activeBets.find(b =>
       b.status === "active" &&
@@ -42,15 +40,21 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
     const isCreator = playerBet.creatorId === ctx.from.id;
     const isChallenger = playerBet.challengerId === ctx.from.id;
 
-    // Check if already played
     if (isCreator && playerBet.creatorScore !== null) {
-      return ctx.reply("⚠️ You already rolled for this bet!", { reply_to_message_id: msg.message_id });
+      await ctx.reply("⚠️ You already rolled for this bet\\!", {
+        parse_mode: "MarkdownV2",
+        reply_to_message_id: msg.message_id,
+      });
+      return next();
     }
     if (isChallenger && playerBet.challengerScore !== null) {
-      return ctx.reply("⚠️ You already rolled for this bet!", { reply_to_message_id: msg.message_id });
+      await ctx.reply("⚠️ You already rolled for this bet\\!", {
+        parse_mode: "MarkdownV2",
+        reply_to_message_id: msg.message_id,
+      });
+      return next();
     }
 
-    // Record the score
     if (isCreator) {
       await updateBetStatus(betId, { creatorScore: score, creatorDiceMessageId: msg.message_id });
     } else {
@@ -58,9 +62,8 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
     }
 
     const updatedBet = await getBet(betId);
-    if (!updatedBet) return;
+    if (!updatedBet) return next();
 
-    // If both have played, determine winner
     if (updatedBet.creatorScore !== null && updatedBet.challengerScore !== null) {
       const creator = await getUserByTelegramId(updatedBet.creatorId);
       const challenger = updatedBet.challengerId ? await getUserByTelegramId(updatedBet.challengerId) : null;
@@ -89,19 +92,17 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
       });
 
       if (winnerId) {
-        // Winner gets pot
         await updateBalance(winnerId, pot, "bet_win", `Won bet #${betId}`, betId);
-
-        // Update stats
         const loserId = winnerId === updatedBet.creatorId ? updatedBet.challengerId : updatedBet.creatorId;
-        if (loserId) {
-          await db.update(usersTable).set({
-            totalWins: sql`total_wins + 1`,
-            totalBets: sql`total_bets + 1`,
-            totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`,
-            totalWon: sql`CAST(total_won AS DECIMAL) + ${pot}`,
-          }).where(eq(usersTable.telegramId, winnerId));
 
+        await db.update(usersTable).set({
+          totalWins: sql`total_wins + 1`,
+          totalBets: sql`total_bets + 1`,
+          totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`,
+          totalWon: sql`CAST(total_won AS DECIMAL) + ${pot}`,
+        }).where(eq(usersTable.telegramId, winnerId));
+
+        if (loserId) {
           await db.update(usersTable).set({
             totalLosses: sql`total_losses + 1`,
             totalBets: sql`total_bets + 1`,
@@ -130,20 +131,16 @@ export function registerGameHandlers(bot: Telegraf<Context>) {
 
       await ctx.reply(
         betResultMessage(updatedBet, creatorName, challengerName, winnerName, updatedBet.gameType as GameType),
-        { parse_mode: "Markdown" }
+        { parse_mode: "MarkdownV2" }
       );
     } else {
-      const waiting = isCreator ? challengerName(updatedBet) : "opponent";
-      await ctx.reply(`✅ Score recorded: *${score}*\n\nWaiting for ${waiting} to roll...`, {
-        parse_mode: "Markdown",
-        reply_to_message_id: msg.message_id,
-      });
+      const waitingFor = isCreator ? "your opponent" : "the bet creator";
+      await ctx.reply(
+        `✅ Score recorded: *${score}*\n\n⏳ Waiting for ${waitingFor} to roll\\.\\.\\.`,
+        { parse_mode: "MarkdownV2", reply_to_message_id: msg.message_id }
+      );
     }
 
     return next();
   });
-}
-
-function challengerName(bet: any) {
-  return "the challenger";
 }
