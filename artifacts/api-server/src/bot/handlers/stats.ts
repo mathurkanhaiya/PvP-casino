@@ -1,7 +1,7 @@
 import { Telegraf, Context } from "telegraf";
 import { getOrCreateUser, getUserStats, getLeaderboard, getUserRecentBets } from "../db.js";
-import { profileMessage, leaderboardMessage, formatBalance } from "../messages.js";
-import { mainMenuKeyboard, backToMenuKeyboard } from "../keyboards.js";
+import { profileMessage, leaderboardMessage, formatBalance, mv2Num } from "../messages.js";
+import { mainMenuKeyboard, backToMenuKeyboard, privateMenuKeyboard } from "../keyboards.js";
 import { GAMES, GameType, DAILY_BONUS } from "../config.js";
 import { db } from "@workspace/db";
 import { usersTable, transactionsTable } from "@workspace/db/schema";
@@ -121,8 +121,9 @@ async function handleDaily(ctx: Context, userId: number, editMode: boolean) {
   const { ready, text: cooldownText } = nextDailyText((user as any).lastDailyAt);
 
   if (!ready) {
+    const menuKb = ctx.chat?.type === "private" ? privateMenuKeyboard(userId) : mainMenuKeyboard(userId);
     if (editMode) {
-      await safeEdit(ctx, cooldownText, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
+      await safeEdit(ctx, cooldownText, { parse_mode: "MarkdownV2", ...menuKb });
     } else {
       await ctx.reply(cooldownText, { parse_mode: "MarkdownV2" });
     }
@@ -150,11 +151,12 @@ async function handleDaily(ctx: Context, userId: number, editMode: boolean) {
   const nextClaimTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const nextStr = nextClaimTime.toUTCString().replace(" GMT", " UTC");
 
-  const text = `🎁 *Daily Bonus Claimed\\!*\n\n\\+${formatBalance(DAILY_BONUS)} added to your wallet\\!\n💰 New Balance: ${formatBalance(newBalance)}\n\n⏰ Next bonus: _${esc(nextStr)}_\n\n_Come back in exactly 24 hours\\!_ 🎰`;
+  const text = `🎁 *Daily Bonus Claimed\\!*\n\n\\+${mv2Num(DAILY_BONUS)} added to your wallet\\!\n💰 New Balance: ${mv2Num(newBalance)}\n\n⏰ Next bonus: _${esc(nextStr)}_\n\n_Come back in exactly 24 hours\\!_ 🎰`;
 
+  const kb = ctx.chat?.type === "private" ? privateMenuKeyboard(userId) : mainMenuKeyboard(userId);
   if (editMode) {
-    await safeEdit(ctx, text, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
+    await safeEdit(ctx, text, { parse_mode: "MarkdownV2", ...kb });
   } else {
-    await ctx.reply(text, { parse_mode: "MarkdownV2", ...mainMenuKeyboard(userId) });
+    await ctx.reply(text, { parse_mode: "MarkdownV2", ...kb });
   }
 }

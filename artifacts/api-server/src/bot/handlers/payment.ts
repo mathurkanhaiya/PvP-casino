@@ -1,6 +1,6 @@
 import { Telegraf, Context, Markup } from "telegraf";
 import { getUserByTelegramId, updateBalance } from "../db.js";
-import { formatBalance } from "../messages.js";
+import { formatBalance, mv2Num } from "../messages.js";
 import { depositMenuKeyboard, withdrawMenuKeyboard, backToMenuKeyboard } from "../keyboards.js";
 import { esc } from "../escape.js";
 import { COINS_PER_STAR, MIN_DEPOSIT_STARS, WITHDRAW_TIERS } from "../config.js";
@@ -27,14 +27,14 @@ function depositInfoText() {
   return `
 💳 *Deposit with Telegram Stars*
 
-*Rate:* ⭐ 1 Star \\= ${formatBalance(COINS_PER_STAR)}
-*Minimum:* 1 Star \\= ${formatBalance(COINS_PER_STAR)}
+*Rate:* ⭐ 1 Star \\= ${mv2Num(COINS_PER_STAR)}
+*Minimum:* 1 Star \\= ${mv2Num(COINS_PER_STAR)}
 
 *Quick tiers:*
-⭐ 1 Star → ${formatBalance(500)}
-⭐ 10 Stars → ${formatBalance(5_000)}
-⭐ 50 Stars → ${formatBalance(25_000)}
-⭐ 100 Stars → ${formatBalance(50_000)}
+⭐ 1 Star → ${mv2Num(500)}
+⭐ 10 Stars → ${mv2Num(5_000)}
+⭐ 50 Stars → ${mv2Num(25_000)}
+⭐ 100 Stars → ${mv2Num(50_000)}
 
 Or tap *Custom Amount* to enter any number of stars\\.
 
@@ -46,13 +46,13 @@ function withdrawInfoText(balance: string | number) {
   const bal = parseFloat(balance as string);
   const rows = WITHDRAW_TIERS.map(t => {
     const ok = bal >= t.coins;
-    return `${ok ? "✅" : "🔒"} ${formatBalance(t.coins)} → ⭐ *${t.stars} Stars*\n   _Gift: ${t.label}_`;
+    return `${ok ? "✅" : "🔒"} ${mv2Num(t.coins)} → ⭐ *${t.stars} Stars*\n   _Gift: ${t.label}_`;
   }).join("\n\n");
 
   return `
 💸 *Withdraw — Coins → Telegram Star Gift*
 
-*Your Balance:* ${formatBalance(balance)}
+*Your Balance:* ${mv2Num(bal)}
 
 ${rows}
 
@@ -123,7 +123,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
     await ctx.answerCbQuery();
     pendingDeposit.set(ctx.from.id, "awaiting_amount");
     await safeEdit(ctx,
-      `✏️ *Custom Deposit*\n\nHow many stars do you want to deposit?\n\n*Rate:* ⭐ 1 Star \\= ${formatBalance(COINS_PER_STAR)}\n*Min:* 1 star \\| *Max:* 10,000 stars\n\nType the number of stars below:`,
+      `✏️ *Custom Deposit*\n\nHow many stars do you want to deposit?\n\n*Rate:* ⭐ 1 Star \\= ${mv2Num(COINS_PER_STAR)}\n*Min:* 1 star \\| *Max:* 10,000 stars\n\nType the number of stars below:`,
       { parse_mode: "MarkdownV2" }
     );
   });
@@ -172,7 +172,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
 
     const user = await getUserByTelegramId(ctx.from.id);
     await ctx.reply(
-      `✅ *Deposit Successful\\!*\n\n⭐ *${stars} Star${stars > 1 ? "s" : ""}* received\n\\+${formatBalance(coins)} credited instantly\n💰 New Balance: ${formatBalance(user?.balance ?? 0)}\n\nGood luck at the casino\\! 🎰`,
+      `✅ *Deposit Successful\\!*\n\n⭐ *${stars} Star${stars > 1 ? "s" : ""}* received\n\\+${mv2Num(coins)} credited instantly\n💰 New Balance: ${mv2Num(user?.balance ?? 0)}\n\nGood luck at the casino\\! 🎰`,
       { parse_mode: "MarkdownV2", ...backToMenuKeyboard(ctx.from.id) }
     );
     return next();
@@ -237,7 +237,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
     const updated = await getUserByTelegramId(ctx.from.id);
 
     await safeEdit(ctx,
-      `⏳ *Withdrawal \\#${request.id} Submitted\\!*\n\n💸 Coins deducted: ${formatBalance(tier.coins)}\n⭐ Stars: *${tier.stars}*\n🎁 Gift type: *${tier.label}*\n💰 Remaining: ${formatBalance(updated?.balance ?? 0)}\n\n_Gift will be sent within 24 hours\\._`,
+      `⏳ *Withdrawal \\#${request.id} Submitted\\!*\n\n💸 Coins deducted: ${mv2Num(tier.coins)}\n⭐ Stars: *${tier.stars}*\n🎁 Gift type: *${tier.label}*\n💰 Remaining: ${mv2Num(updated?.balance ?? 0)}\n\n_Gift will be sent within 24 hours\\._`,
       { parse_mode: "MarkdownV2", ...backToMenuKeyboard(ctx.from.id) }
     );
 
@@ -247,7 +247,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
     for (const adminId of adminIds) {
       try {
         await ctx.telegram.sendMessage(adminId,
-          `💸 *Withdrawal Request \\#${request.id}*\n\n👤 ${esc(userName)} \\(\`${user.telegramId}\`\\)\n💰 ${formatBalance(tier.coins)}\n⭐ ${tier.stars} Stars\n🎁 Gift: *${tier.label}*\n\n/adminpanel → Withdrawal Requests`,
+          `💸 *Withdrawal Request \\#${request.id}*\n\n👤 ${esc(userName)} \\(\`${user.telegramId}\`\\)\n💰 ${mv2Num(tier.coins)}\n⭐ ${tier.stars} Stars\n🎁 Gift: *${tier.label}*\n\n/adminpanel → Withdrawal Requests`,
           { parse_mode: "MarkdownV2" }
         );
       } catch {}
@@ -274,7 +274,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
 
     const rows = requests.map(r => {
       const giftInfo = r.adminNote ? ` — 🎁 ${esc(r.adminNote)}` : "";
-      return `*\\#${r.id}* · \`${r.userId}\` · ${formatBalance(r.coinsDeducted)} → ⭐${r.starsRequested}★${giftInfo}`;
+      return `*\\#${r.id}* · \`${r.userId}\` · ${mv2Num(r.coinsDeducted)} → ⭐${r.starsRequested}★${giftInfo}`;
     }).join("\n");
 
     const buttons = [
@@ -348,7 +348,7 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
 
     try {
       await ctx.telegram.sendMessage(req.userId,
-        `❌ *Withdrawal \\#${reqId} Rejected*\n\n${formatBalance(req.coinsDeducted)} has been refunded to your balance\\.\n\nContact an admin if you have questions\\.`,
+        `❌ *Withdrawal \\#${reqId} Rejected*\n\n${mv2Num(req.coinsDeducted)} has been refunded to your balance\\.\n\nContact an admin if you have questions\\.`,
         { parse_mode: "MarkdownV2" }
       );
     } catch {}

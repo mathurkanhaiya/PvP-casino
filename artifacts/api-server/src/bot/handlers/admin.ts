@@ -3,7 +3,7 @@ import {
   getUserByTelegramId, getAllUsers, getUserCount, getTotalBetsCount, getTotalVolume,
   banUser, unbanUser, setAdminBalance, setUserAdmin, getLeaderboard, expireOldBets
 } from "../db.js";
-import { adminPanelMessage, formatBalance } from "../messages.js";
+import { adminPanelMessage, formatBalance, mv2Num } from "../messages.js";
 import { adminPanelKeyboard, userManagementKeyboard, backToAdminKeyboard } from "../keyboards.js";
 import { esc, safeName } from "../escape.js";
 
@@ -30,7 +30,7 @@ function buildUserCard(user: any): string {
 
 *Name:* ${name}
 *ID:* \`${user.telegramId}\`
-*Balance:* ${formatBalance(user.balance)}
+*Balance:* ${mv2Num(user.balance)}
 *Status:* ${user.isBanned ? "🚫 Banned" : "✅ Active"}${user.isAdmin ? " 👑 Admin" : ""}
 *Wins/Losses:* ${user.totalWins}/${user.totalLosses}
 *Total Bets:* ${user.totalBets}
@@ -82,11 +82,11 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
 
     const topText = topPlayers.map((u, i) => {
       const name = u.username ? `@${esc(u.username)}` : (safeName(u.firstName) || `User#${u.telegramId}`);
-      return `${i + 1}\\. ${name} — W:${u.totalWins} L:${u.totalLosses} Bal:${formatBalance(u.balance)}`;
+      return `${i + 1}\\. ${name} — W:${u.totalWins} L:${u.totalLosses} Bal:${mv2Num(u.balance)}`;
     }).join("\n");
 
     await safeEdit(ctx,
-      `📊 *Detailed Bot Statistics*\n\n👥 Users: ${users}\n🎮 Total Bets: ${bets}\n💰 Total Volume: ${formatBalance(volume)}\n\n🏆 *Top 5 Players:*\n${topText || "None yet"}`,
+      `📊 *Detailed Bot Statistics*\n\n👥 Users: ${users}\n🎮 Total Bets: ${bets}\n💰 Total Volume: ${mv2Num(volume)}\n\n🏆 *Top 5 Players:*\n${topText || "None yet"}`,
       { parse_mode: "MarkdownV2", ...backToAdminKeyboard() }
     );
   });
@@ -101,7 +101,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     const userList = users.map(u => {
       const name = u.username ? `@${esc(u.username)}` : (safeName(u.firstName) || `User#${u.telegramId}`);
       const status = u.isBanned ? "🚫" : (u.isAdmin ? "👑" : "✅");
-      return `${status} ${name} — ${formatBalance(u.balance)}`;
+      return `${status} ${name} — ${mv2Num(u.balance)}`;
     }).join("\n");
 
     await safeEdit(ctx,
@@ -119,7 +119,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     const users = await getLeaderboard(10);
     const rows = users.map((u, i) => {
       const name = u.username ? `@${esc(u.username)}` : (safeName(u.firstName) || `User#${u.telegramId}`);
-      return `${i + 1}\\. ${name} \\| Bal: ${formatBalance(u.balance)} \\| W: ${u.totalWins} \\| L: ${u.totalLosses}`;
+      return `${i + 1}\\. ${name} \\| Bal: ${mv2Num(u.balance)} \\| W: ${u.totalWins} \\| L: ${u.totalLosses}`;
     }).join("\n");
 
     await safeEdit(ctx, `🏆 *Top Players*\n\n${rows || "No data"}`, {
@@ -299,7 +299,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     const newBal = parseFloat(user.balance as string) + amount;
     await setAdminBalance(uid, newBal);
     await ctx.reply(
-      `✅ *Added ${formatBalance(amount)} to user* \`${uid}\`\n📜 New balance: ${formatBalance(newBal)}`,
+      `✅ *Added ${mv2Num(amount)} to user* \`${uid}\`\n📜 New balance: ${mv2Num(newBal)}`,
       { parse_mode: "MarkdownV2" }
     );
   });
@@ -320,7 +320,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     const newBal = Math.max(0, parseFloat(user.balance as string) - amount);
     await setAdminBalance(uid, newBal);
     await ctx.reply(
-      `✅ *Removed ${formatBalance(amount)} from user* \`${uid}\`\n📜 New balance: ${formatBalance(newBal)}`,
+      `✅ *Removed ${mv2Num(amount)} from user* \`${uid}\`\n📜 New balance: ${mv2Num(newBal)}`,
       { parse_mode: "MarkdownV2" }
     );
   });
@@ -356,7 +356,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
           if (!user) return ctx.reply("❌ User not found\\.", { parse_mode: "MarkdownV2" });
           const newBal = Math.max(0, parseFloat(user.balance as string) + amount);
           await setAdminBalance(uid, newBal);
-          await ctx.reply(`✅ Balance updated to ${formatBalance(newBal)} for user \`${uid}\``, { parse_mode: "MarkdownV2" });
+          await ctx.reply(`✅ Balance updated to ${mv2Num(newBal)} for user \`${uid}\`\\.`, { parse_mode: "MarkdownV2" });
           break;
         }
         case "ban_user": {
@@ -398,7 +398,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
           const amount = parseFloat(text);
           if (isNaN(amount) || amount < 0) return ctx.reply("❌ Invalid amount\\.", { parse_mode: "MarkdownV2" });
           await setAdminBalance(pending.data.targetId, amount);
-          await ctx.reply(`✅ Balance set to ${formatBalance(amount)} for user \`${pending.data.targetId}\`\\.`, { parse_mode: "MarkdownV2" });
+          await ctx.reply(`✅ Balance set to ${mv2Num(amount)} for user \`${pending.data.targetId}\`\\.`, { parse_mode: "MarkdownV2" });
           break;
         }
         case "add_balance": {
@@ -408,7 +408,7 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
           if (!user) return ctx.reply("❌ User not found\\.", { parse_mode: "MarkdownV2" });
           const newBal = Math.max(0, parseFloat(user.balance as string) + amount);
           await setAdminBalance(pending.data.targetId, newBal);
-          await ctx.reply(`✅ Balance updated to ${formatBalance(newBal)} for user \`${pending.data.targetId}\`\\.`, { parse_mode: "MarkdownV2" });
+          await ctx.reply(`✅ Balance updated to ${mv2Num(newBal)} for user \`${pending.data.targetId}\`\\.`, { parse_mode: "MarkdownV2" });
           break;
         }
         default:
