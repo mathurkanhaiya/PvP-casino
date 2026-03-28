@@ -459,9 +459,10 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     );
   });
 
-  // Text handler for custom bet amounts
+  // Text handler for custom bet amounts — skip commands so they always route correctly
   bot.on("text", async (ctx, next) => {
     if (!ctx.from) return next();
+    if (ctx.message.text.startsWith("/")) return next();  // never intercept commands
     const pending = pendingCustomBets.get(ctx.from.id);
     if (!pending) return next();
 

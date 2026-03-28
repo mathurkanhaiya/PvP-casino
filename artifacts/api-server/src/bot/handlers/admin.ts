@@ -283,9 +283,10 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     await ctx.reply(`Enter amount to ADD to user \`${targetId}\` \\(negative to subtract\\):`, { parse_mode: "MarkdownV2" });
   });
 
-  // Admin text handler
+  // Admin text handler — skip if user is sending a command
   bot.on("text", async (ctx, next) => {
     if (!ctx.from) return next();
+    if (ctx.message.text.startsWith("/")) return next();  // never intercept commands
     const pending = pendingAdminActions.get(ctx.from.id);
     if (!pending) return next();
 
