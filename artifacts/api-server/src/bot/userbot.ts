@@ -64,7 +64,7 @@ export async function sendUsdtPayout(
 
   try {
     const fmt = amountUsdt.toFixed(4).replace(/\.?0+$/, "") || "0";
-    const cmd = `/tip @${winnerUsername} ${fmt} USDT`;
+    const cmd = `/tip ${fmt} USDT @${winnerUsername}`;
     await client.sendMessage(chatId, { message: cmd });
     logger.info({ winnerUsername, amountUsdt, chatId }, "USDT payout tip command sent via userbot");
     return true;

@@ -4,7 +4,7 @@
  * Flow:
  *  1. Creator runs /usdt → picks game → picks amount → picks side (choice games)
  *  2. Bot creates pending bet and shows tip instruction
- *  3. Creator sends:  /tip @CASINO_ACCOUNT <amount> USDT  in this chat via @CWalletBot
+ *  3. Creator sends:  /tip <amount> USDT @CASINO_ACCOUNT  in this chat via @CWalletBot
  *  4. Bot detects @CWalletBot confirmation → bet becomes "awaiting_opponent"
  *  5. Opponent clicks "Join" → (picks side for choice games) → sees tip instruction
  *  6. Opponent tips → both paid → game resolves (instant) or dice starts
@@ -364,7 +364,7 @@ async function sendResultAndPayout(
     } else {
       const payStr = payout.toFixed(4).replace(/\.?0+$/, "");
       msg += `⚠️ _Admin: send ${mv2Usdt(payout)} to @${esc(winnerUname)}_\n`;
-      msg += `\`/tip @${winnerUname} ${payStr} USDT\``;
+      msg += `\`/tip ${payStr} USDT @${winnerUname}\``;
     }
   } else {
     msg += `🤝 *Tie\\!* Refunding both players\\.`;
@@ -373,8 +373,8 @@ async function sendResultAndPayout(
     if (bet.opponentUsername) await sendUsdtPayout(bet.opponentUsername, amt, bet.chatId);
     if (!isUserbotReady()) {
       msg += `\n\n⚠️ _Admin: refund ${mv2Usdt(amt)} to each player_\n`;
-      msg += `\`/tip @${bet.creatorUsername}  ${refundStr} USDT\`\n`;
-      msg += `\`/tip @${bet.opponentUsername} ${refundStr} USDT\``;
+      msg += `\`/tip ${refundStr} USDT @${bet.creatorUsername}\`\n`;
+      msg += `\`/tip ${refundStr} USDT @${bet.opponentUsername}\``;
     }
   }
   await bot.telegram.sendMessage(bet.chatId, msg, { parse_mode: "MarkdownV2" });
@@ -437,7 +437,7 @@ function tipInstr(bet: UsdtBet): string {
   return (
     `💳 *Send your payment to activate:*\n\n` +
     `In this chat, send:\n` +
-    `\`/tip @${CASINO_ACCOUNT} ${a} USDT\`\n\n` +
+    `\`/tip ${a} USDT @${CASINO_ACCOUNT}\`\n\n` +
     `_I'll detect it automatically\\. Expires in ${USDT_PAYMENT_EXPIRY_MINUTES} min\\._`
   );
 }
