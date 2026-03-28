@@ -22,7 +22,9 @@ function buildRecentBetsText(recentBets: any[], userId: number): string {
     const game = GAMES[b.gameType as GameType];
     const won = b.winnerId === userId;
     const result = b.status === "completed" ? (won ? "✅ Won" : "❌ Lost") : `⏳ ${b.status}`;
-    return `${game.emoji} ${game.name} — ${formatBalance(b.amount)} — ${result}`;
+    // formatBalance uses toLocaleString which can include dots — escape them
+    const amt = Math.abs(Number(b.amount)).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    return `${game.emoji} ${game.name} \\| 🪙 ${amt} \\| ${result}`;
   }).join("\n");
 }
 

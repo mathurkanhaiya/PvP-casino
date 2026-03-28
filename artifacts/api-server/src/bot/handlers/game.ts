@@ -1,7 +1,7 @@
 import { Telegraf, Context } from "telegraf";
 import { Message } from "telegraf/types";
 import { getUserByTelegramId, getBet, updateBetStatus, updateBalance, updateStreaks, getActiveBets } from "../db.js";
-import { betResultMessage, formatBalance } from "../messages.js";
+import { betResultMessage } from "../messages.js";
 import { rematchKeyboard } from "../keyboards.js";
 import { EMOJI_TO_GAME, GameType } from "../config.js";
 import { esc } from "../escape.js";

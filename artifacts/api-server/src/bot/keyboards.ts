@@ -8,6 +8,7 @@ const QUICK_DEPOSIT_STARS = [1, 10, 50, 100];
 // ── Personal menus (userId encoded — owner only) ─────────────────────────────
 
 export function mainMenuKeyboard(userId: number) {
+  const botUsername = process.env.BOT_USERNAME || "AdsRewardGameBot";
   return Markup.inlineKeyboard([
     [
       Markup.button.callback("🎮 Create Bet",  `play_${userId}`),
@@ -25,7 +26,10 @@ export function mainMenuKeyboard(userId: number) {
       Markup.button.callback("📜 Wallet",      `wallet_${userId}`),
       Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
     ],
-    [Markup.button.callback("❓ Help", `help_${userId}`)],
+    [
+      Markup.button.callback("❓ Help", `help_${userId}`),
+      Markup.button.url("➕ Add to Group", `https://t.me/${botUsername}?startgroup=true`),
+    ],
     // Quick game emoji row — dice games
     [
       Markup.button.callback("🎲", `game_dice_${userId}`),

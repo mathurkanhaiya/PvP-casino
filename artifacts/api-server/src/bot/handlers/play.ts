@@ -1,9 +1,9 @@
-import { Telegraf, Context } from "telegraf";
+import { Telegraf, Context, Markup } from "telegraf";
 import {
   getOrCreateUser, getUserByTelegramId, createBet, getBet,
   updateBetStatus, updateBalance, updateStreaks, getActiveBets,
 } from "../db.js";
-import { betCreatedMessage, betActiveMessage, formatBalance } from "../messages.js";
+import { betCreatedMessage, betActiveMessage, formatBalance, mv2Num } from "../messages.js";
 import {
   gameSelectKeyboard, betAmountKeyboard, coinflipPickKeyboard,
   acceptBetKeyboard, activeBetsKeyboard, backToMenuKeyboard, rpsPickKeyboard,
@@ -26,9 +26,28 @@ async function safeEdit(ctx: Context, text: string, extra: any) {
   }
 }
 
+function isPrivateChat(ctx: Context): boolean {
+  return ctx.chat?.type === "private";
+}
+
+function privateChatWarning(ctx: Context) {
+  const botUsername = process.env.BOT_USERNAME || "AdsRewardGameBot";
+  return ctx.reply(
+    "⚠️ *Bets need a group chat\\!*\n\nPvP bets require at least 2 players in a group\\. Add the bot to a group and create bets there so opponents can join\\!\n\n_You can still use /wallet, /stats, /deposit, /withdraw, /daily here\\._",
+    {
+      parse_mode: "MarkdownV2",
+      ...Markup.inlineKeyboard([
+        [Markup.button.url("➕ Add Bot to a Group", `https://t.me/${botUsername}?startgroup=true`)],
+      ]),
+    }
+  );
+}
+
 /** Validate and create a quick-bet from a command, e.g. /dice 500 */
 async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | undefined) {
   if (!ctx.from || !ctx.chat) return;
+
+  if (isPrivateChat(ctx)) return privateChatWarning(ctx);
 
   const user = await getOrCreateUser(ctx.from.id, {
     username: ctx.from.username,
@@ -43,19 +62,19 @@ async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | und
   if (gameKey === "coinflip") {
     if (!rawAmount || rawAmount.trim() === "") {
       return ctx.reply(
-        `${game.emoji} *Coin Flip — Pick Amount*\n\nUsage: \`/coinflip <amount>\`\n\nRange: ${formatBalance(MIN_BET)} — ${formatBalance(MAX_BET)}`,
+        `${game.emoji} *Coin Flip — Pick Amount*\n\nUsage: \`/coinflip <amount>\`\n\nRange: ${mv2Num(MIN_BET)} — ${mv2Num(MAX_BET)}`,
         { parse_mode: "MarkdownV2", ...betAmountKeyboard(gameKey, ctx.from.id) }
       );
     }
     const amount = parseFloat(rawAmount.trim());
     if (isNaN(amount) || amount < MIN_BET || amount > MAX_BET) {
-      return ctx.reply(`❌ Amount must be between ${formatBalance(MIN_BET)} and ${formatBalance(MAX_BET)}\\.`, { parse_mode: "MarkdownV2" });
+      return ctx.reply(`❌ Amount must be between ${mv2Num(MIN_BET)} and ${mv2Num(MAX_BET)}\\.`, { parse_mode: "MarkdownV2" });
     }
     if (parseFloat(user.balance as string) < amount) {
-      return ctx.reply(`❌ Insufficient balance\\. You need ${formatBalance(amount)}\\.`, { parse_mode: "MarkdownV2" });
+      return ctx.reply(`❌ Insufficient balance\\. You need ${mv2Num(amount)}\\.`, { parse_mode: "MarkdownV2" });
     }
     pendingCoinflip.set(ctx.from.id, { amount });
-    return ctx.reply(`🪙 *Coin Flip — ${formatBalance(amount)}*\n\nWhich side do you pick?`, {
+    return ctx.reply(`🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
       parse_mode: "MarkdownV2",
       ...coinflipPickKeyboard(ctx.from.id),
     });
@@ -63,17 +82,17 @@ async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | und
 
   if (!rawAmount || rawAmount.trim() === "") {
     return ctx.reply(
-      `${game.emoji} *${game.name} — Quick Bet*\n\nUsage: \`/${gameKey} <amount>\`\nRange: ${formatBalance(MIN_BET)} — ${formatBalance(MAX_BET)}`,
+      `${game.emoji} *${game.name} — Quick Bet*\n\nUsage: \`/${gameKey} <amount>\`\nRange: ${mv2Num(MIN_BET)} — ${mv2Num(MAX_BET)}`,
       { parse_mode: "MarkdownV2", ...betAmountKeyboard(gameKey, ctx.from.id) }
     );
   }
 
   const amount = parseFloat(rawAmount.trim());
   if (isNaN(amount) || amount < MIN_BET || amount > MAX_BET) {
-    return ctx.reply(`❌ Amount must be between ${formatBalance(MIN_BET)} and ${formatBalance(MAX_BET)}\\.`, { parse_mode: "MarkdownV2" });
+    return ctx.reply(`❌ Amount must be between ${mv2Num(MIN_BET)} and ${mv2Num(MAX_BET)}\\.`, { parse_mode: "MarkdownV2" });
   }
   if (parseFloat(user.balance as string) < amount) {
-    return ctx.reply(`❌ Insufficient balance\\. You need ${formatBalance(amount)} but have ${formatBalance(user.balance)}\\.`, { parse_mode: "MarkdownV2" });
+    return ctx.reply(`❌ Insufficient balance\\. You need ${mv2Num(amount)} but have ${mv2Num(user.balance)}\\.`, { parse_mode: "MarkdownV2" });
   }
 
   const bet = await createBet(ctx.from.id, gameKey, amount, ctx.chat.id);
@@ -88,6 +107,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
   // Full play menu
   bot.command("play", async (ctx) => {
     if (!ctx.from) return;
+    if (isPrivateChat(ctx)) return privateChatWarning(ctx);
     const user = await getOrCreateUser(ctx.from.id, { username: ctx.from.username, firstName: ctx.from.first_name });
     if (user.isBanned) return ctx.reply("🚫 You are banned from this casino.");
     await ctx.reply("🎮 *Choose your game:*", {
@@ -112,6 +132,10 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     if (!ctx.from) return;
     const ownerId = parseInt(ctx.match[1]);
     if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Use /play to create your own bet.", { show_alert: true });
+    if (isPrivateChat(ctx)) {
+      await ctx.answerCbQuery("⚠️ Bets need a group chat!", { show_alert: true });
+      return privateChatWarning(ctx);
+    }
     await ctx.answerCbQuery();
     await safeEdit(ctx, "🎮 *Choose your game:*", { parse_mode: "MarkdownV2", ...gameSelectKeyboard(ctx.from.id) });
   });
@@ -175,7 +199,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     // Coinflip: store amount, show H/T picker instead
     if (gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
-      return safeEdit(ctx, `🪙 *Coin Flip — ${formatBalance(amount)}*\n\nWhich side do you pick?`, {
+      return safeEdit(ctx, `🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
         parse_mode: "MarkdownV2",
         ...coinflipPickKeyboard(ctx.from.id),
       });
@@ -220,7 +244,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     await ctx.answerCbQuery();
     pendingCustomBets.set(ctx.from.id, { gameKey });
     await safeEdit(ctx,
-      `✏️ *Enter Custom Bet Amount*\n\nRange: ${formatBalance(MIN_BET)} — ${formatBalance(MAX_BET)}\n\nType the number below:`,
+      `✏️ *Enter Custom Bet Amount*\n\nRange: ${mv2Num(MIN_BET)} — ${mv2Num(MAX_BET)}\n\nType the number below:`,
       { parse_mode: "MarkdownV2" }
     );
   });
@@ -309,7 +333,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       await ctx.answerCbQuery("🤜 Make your move!");
       await safeEdit(ctx, betActiveMessage(bet, creatorName, challengerName, "rps"), { parse_mode: "MarkdownV2" });
       await ctx.reply(
-        `🤜 *Rock Paper Scissors — Make your move\\!*\n\n👤 ${esc(creatorName)} vs 👤 ${esc(challengerName)}\n💰 Pot: ${formatBalance(amount * 2)}\n\nBoth players pick below:`,
+        `🤜 *Rock Paper Scissors — Make your move\\!*\n\n👤 ${esc(creatorName)} vs 👤 ${esc(challengerName)}\n💰 Pot: ${mv2Num(amount * 2)}\n\nBoth players pick below:`,
         { parse_mode: "MarkdownV2", ...rpsPickKeyboard(betId) }
       );
       return;
@@ -319,7 +343,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     await ctx.answerCbQuery(`✅ Battle started! Send ${game.telegramEmoji}`);
     await safeEdit(ctx, betActiveMessage(bet, creatorName, challengerName, gameKey), { parse_mode: "MarkdownV2" });
     await ctx.reply(
-      `🔥 *Battle is ON\\!*\n\n👤 ${esc(creatorName)} vs 👤 ${esc(challengerName)}\n💰 Pot: ${formatBalance(amount * 2)}\n\nBoth players send ${game.telegramEmoji} now\\! Highest score wins\\!`,
+      `🔥 *Battle is ON\\!*\n\n👤 ${esc(creatorName)} vs 👤 ${esc(challengerName)}\n💰 Pot: ${mv2Num(amount * 2)}\n\nBoth players send ${game.telegramEmoji} now\\! Highest score wins\\!`,
       { parse_mode: "MarkdownV2" }
     );
   });
@@ -349,7 +373,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     const creator = await getUserByTelegramId(bet.creatorId);
     const creatorName = creator?.username ? `@${esc(creator.username)}` : esc(creator?.firstName || "Unknown");
 
-    const msg = `${game.emoji} *Bet \\#${betId}*\n\n🎮 Game: ${game.name}\n💰 Amount: ${formatBalance(bet.amount)}\n👤 Creator: ${creatorName}\n📊 Status: ${bet.status.toUpperCase()}`;
+    const msg = `${game.emoji} *Bet \\#${betId}*\n\n🎮 Game: ${game.name}\n💰 Amount: ${mv2Num(bet.amount)}\n👤 Creator: ${creatorName}\n📊 Status: ${bet.status.toUpperCase()}`;
 
     if (bet.status === "pending" && bet.creatorId !== ctx.from.id) {
       await safeEdit(ctx, msg, { parse_mode: "MarkdownV2", ...acceptBetKeyboard(betId) });
@@ -374,7 +398,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
 
     if (gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
-      return safeEdit(ctx, `🪙 *Rematch — Coin Flip ${formatBalance(amount)}*\n\nPick your side:`, {
+      return safeEdit(ctx, `🪙 *Rematch — Coin Flip ${mv2Num(amount)}*\n\nPick your side:`, {
         parse_mode: "MarkdownV2",
         ...coinflipPickKeyboard(ctx.from.id),
       });
@@ -483,7 +507,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
 
     if (pending.gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
-      return ctx.reply(`🪙 *Coin Flip — ${formatBalance(amount)}*\n\nWhich side do you pick?`, {
+      return ctx.reply(`🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
         parse_mode: "MarkdownV2",
         ...coinflipPickKeyboard(ctx.from.id),
       });

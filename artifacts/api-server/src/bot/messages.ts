@@ -6,6 +6,32 @@ export function formatBalance(amount: string | number) {
   return `🪙 ${Number(amount).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Format a number safely for MarkdownV2:
+ *  - escapes '.' (decimal point)
+ *  - escapes '-' (negative sign)
+ *  - escapes ',' is NOT needed (comma isn't special in MV2)
+ */
+export function mv2Num(amount: string | number): string {
+  const n = Number(amount);
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  // escape any dots that appear in the formatted number
+  const escaped = formatted.replace(/\./g, "\\.");
+  const sign = n < 0 ? "\\-" : "";
+  return `🪙 ${sign}${escaped}`;
+}
+
+/** Signed mv2 number — always shows + or - prefix */
+function mv2SignedNum(amount: string | number): string {
+  const n = Number(amount);
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const escaped = formatted.replace(/\./g, "\\.");
+  const sign = n >= 0 ? "\\+" : "\\-";
+  return `🪙 ${sign}${escaped}`;
+}
+
 export function displayName(user: User): string {
   if (user.username) return `@${user.username}`;
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ");
@@ -19,7 +45,7 @@ export function welcomeMessage(user: User) {
 🎰 *Welcome to PvP Casino Bot\\!*
 
 Hello, ${name}\\!
-💰 Balance: *${formatBalance(user.balance)}*
+💰 Balance: *${mv2Num(user.balance)}*
 ${streak}
 *🎮 Quick Bet Shortcuts:*
 \`/dice 100\` 🎲  \`/darts 100\` 🎯
@@ -42,7 +68,9 @@ export function helpMessage() {
 /bets — Active bets in this chat
 /stats — Your stats & profile
 /leaderboard — Top players
-/daily — Daily bonus \\(${formatBalance(500)}\\)
+/daily — Daily bonus \\(🪙 500\\)
+/deposit — Deposit with Telegram Stars
+/withdraw — Withdraw coins as a Gift
 /help — This message
 /adminpanel — Admin panel \\(admins only\\)
 
@@ -69,19 +97,19 @@ _Example: \`/slots 500\`_
 3\\. Play out the game
 4\\. Winner takes the full pot\\!
 
+*⚠️ Note:* Bets must be created in a *group chat* so opponents can join\\!
 *🎯 Tie:* Both players are fully refunded
-*⚠️ Bets expire in 10 min if unchallenged*
 `.trim();
 }
 
 export function profileMessage(user: User, rank: number) {
   const winRate = user.totalBets > 0
-    ? ((user.totalWins / user.totalBets) * 100).toFixed(1)
-    : "0.0";
+    ? ((user.totalWins / user.totalBets) * 100).toFixed(1).replace(".", "\\.")
+    : "0\\.0";
 
   const profit = parseFloat(user.totalWon as string) - parseFloat(user.totalWagered as string);
   const profitEmoji = profit >= 0 ? "📈" : "📉";
-  const profitStr = `${profit >= 0 ? "\\+" : ""}${formatBalance(profit)}`;
+  const profitStr = mv2SignedNum(profit);
 
   const name = safeName(user.firstName) || "Unknown";
   const usernameStr = user.username ? ` \\(@${esc(user.username)}\\)` : "";
@@ -95,15 +123,15 @@ export function profileMessage(user: User, rank: number) {
 *ID:* \`${user.telegramId}\`
 🏆 *Rank:* \\#${rank}${streak}
 
-💰 *Balance:* ${formatBalance(user.balance)}
+💰 *Balance:* ${mv2Num(user.balance)}
 📊 *Win Rate:* ${winRate}%
 ${profitEmoji} *Profit/Loss:* ${profitStr}
 
 🎮 *Total Bets:* ${user.totalBets}
 ✅ *Wins:* ${user.totalWins}
 ❌ *Losses:* ${user.totalLosses}
-💵 *Total Wagered:* ${formatBalance(user.totalWagered)}
-🏅 *Total Won:* ${formatBalance(user.totalWon)}
+💵 *Total Wagered:* ${mv2Num(user.totalWagered)}
+🏅 *Total Won:* ${mv2Num(user.totalWon)}
 `.trim();
 }
 
@@ -122,7 +150,7 @@ export function betCreatedMessage(bet: Bet, creatorDisplayName: string, gameKey:
   return `
 ${game.emoji} *New PvP Bet — ${game.name}\\!*
 
-💰 *Amount:* ${formatBalance(bet.amount)}
+💰 *Amount:* ${mv2Num(bet.amount)}
 👤 *Creator:* ${safeCreator}${choiceNote}
 
 📖 ${esc(game.description)}
@@ -146,7 +174,7 @@ export function betActiveMessage(bet: Bet, creatorDisplayName: string, challenge
 ${game.emoji} *PvP Battle Started\\!*
 
 🎮 *Game:* ${game.name}
-💰 *Pot:* ${formatBalance(Number(bet.amount) * 2)}
+💰 *Pot:* ${mv2Num(Number(bet.amount) * 2)}
 👤 *${c1}* vs 👤 *${c2}*
 
 ${instrLine}
@@ -167,7 +195,7 @@ export function betResultMessage(
 
   const resultLine = isTie
     ? "🤝 *It's a tie\\! Both players refunded\\!*"
-    : `🏆 *${esc(winnerDisplayName!)} wins ${formatBalance(Number(bet.amount) * 2)}\\!*`;
+    : `🏆 *${esc(winnerDisplayName!)} wins ${mv2Num(Number(bet.amount) * 2)}\\!*`;
 
   let scoresLine = "";
   if (gameKey === "coinflip") {
@@ -195,7 +223,7 @@ export function leaderboardMessage(users: User[]) {
     const medal = medals[i] || `${i + 1}\\.`;
     const name = u.username ? `@${esc(u.username)}` : (safeName(u.firstName) || `User\\#${u.telegramId}`);
     const streak = (u as any).bestStreak > 2 ? ` 🔥${(u as any).bestStreak}` : "";
-    return `${medal} *${name}* — ${formatBalance(u.totalWon)} \\(${u.totalWins}W/${u.totalLosses}L\\)${streak}`;
+    return `${medal} *${name}* — ${mv2Num(u.totalWon)} \\(${u.totalWins}W/${u.totalLosses}L\\)${streak}`;
   }).join("\n");
 
   return `
@@ -209,24 +237,30 @@ _Rankings based on total coins won_
 
 export function walletMessage(user: User, txs: Transaction[]) {
   const name = safeName(user.firstName) || "Player";
-  const header = `📜 *Wallet — ${name}*\n\n💰 *Balance:* ${formatBalance(user.balance)}\n\n*Recent Transactions:*\n`;
+  const header = `📜 *Wallet — ${name}*\n\n💰 *Balance:* ${mv2Num(user.balance)}\n\n*Recent Transactions:*\n`;
 
   if (txs.length === 0) return header + "_No transactions yet_";
 
   const typeEmoji: Record<string, string> = {
-    bet_placed: "💸",
-    bet_win: "🏆",
-    daily_bonus: "🎁",
-    refund: "↩️",
-    admin_adjust: "⚙️",
+    bet_placed:      "💸",
+    bet_win:         "🏆",
+    daily_bonus:     "🎁",
+    refund:          "↩️",
+    admin_adjust:    "⚙️",
+    deposit:         "💳",
+    withdraw_request:"💸",
+    withdraw_refund: "↩️",
   };
 
   const rows = txs.map(tx => {
-    const sign = parseFloat(tx.amount as string) >= 0 ? "\\+" : "";
+    const amt = parseFloat(tx.amount as string);
+    const sign = amt >= 0 ? "\\+" : "\\-";
+    const absFormatted = Math.abs(amt).toLocaleString("en-US", { maximumFractionDigits: 2 }).replace(/\./g, "\\.");
+    const amountStr = `${sign}🪙 ${absFormatted}`;
     const emoji = typeEmoji[tx.type] || "💱";
     const desc = tx.description ? ` _${esc(tx.description)}_` : "";
     const date = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-    return `${emoji} ${sign}${formatBalance(tx.amount)}${desc} \\[${date}\\]`;
+    return `${emoji} ${amountStr}${desc} \\[${esc(date)}\\]`;
   }).join("\n");
 
   return header + rows;
@@ -239,7 +273,7 @@ export function adminPanelMessage(stats: { users: number; bets: number; volume: 
 📊 *Bot Statistics:*
 👥 Total Users: ${stats.users.toLocaleString()}
 🎮 Total Bets: ${stats.bets.toLocaleString()}
-💰 Total Volume: ${formatBalance(stats.volume)}
+💰 Total Volume: ${mv2Num(stats.volume)}
 
 *Use the buttons below to manage the bot:*
 `.trim();
