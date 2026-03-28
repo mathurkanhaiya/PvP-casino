@@ -70,7 +70,6 @@ export function helpMessage() {
 /leaderboard — Top players
 /daily — Daily bonus \\(🪙 500\\)
 /deposit — Deposit with Telegram Stars
-/withdraw — Withdraw coins as a Gift
 /help — This message
 /adminpanel — Admin panel \\(admins only\\)
 
@@ -286,8 +285,6 @@ export function walletMessage(user: User, txs: Transaction[]) {
     refund:          "↩️",
     admin_adjust:    "⚙️",
     deposit:         "💳",
-    withdraw_request:"💸",
-    withdraw_refund: "↩️",
   };
 
   const rows = txs.map(tx => {

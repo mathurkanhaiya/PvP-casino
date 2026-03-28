@@ -1,5 +1,5 @@
 import { Markup } from "telegraf";
-import { GAMES, BET_AMOUNTS, GameType, WITHDRAW_TIERS, COINS_PER_STAR } from "./config.js";
+import { GAMES, BET_AMOUNTS, GameType, COINS_PER_STAR } from "./config.js";
 import type { Bet, User } from "@workspace/db/schema";
 
 // Deposit quick-tiers shown on keyboard (stars)
@@ -20,9 +20,6 @@ export function mainMenuKeyboard(userId: number) {
     ],
     [
       Markup.button.callback("💳 Deposit ⭐",  `deposit_menu_${userId}`),
-      Markup.button.callback("💸 Withdraw 🎁",  `withdraw_menu_${userId}`),
-    ],
-    [
       Markup.button.callback("📜 Wallet",      `wallet_${userId}`),
       Markup.button.callback("🎲 Active Bets", `active_bets_${userId}`),
     ],
@@ -60,9 +57,6 @@ export function privateMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback("💳 Deposit ⭐",  `deposit_menu_${userId}`),
-      Markup.button.callback("💸 Withdraw 🎁",  `withdraw_menu_${userId}`),
-    ],
-    [
       Markup.button.callback("📜 Wallet",       `wallet_${userId}`),
       Markup.button.callback("📊 My Stats",     `stats_${userId}`),
     ],
@@ -224,25 +218,6 @@ export function depositMenuKeyboard(userId: number) {
   return Markup.inlineKeyboard(rows);
 }
 
-// ── Withdraw keyboard ─────────────────────────────────────────────────────────
-
-export function withdrawMenuKeyboard(balance: string | number, userId: number) {
-  const bal = parseFloat(balance as string);
-  const rows: ReturnType<typeof Markup.button.callback>[][] = WITHDRAW_TIERS.map(t => {
-    const ok = bal >= t.coins;
-    const label = ok
-      ? `🎁 ${t.gifts[0]} — 🪙 ${t.coins.toLocaleString()} → ⭐ ${t.stars}★`
-      : `🔒 Need 🪙 ${t.coins.toLocaleString()} (${t.gifts[0]})`;
-    return [
-      ok
-        ? Markup.button.callback(label, `withdraw_${t.coins}coins_${userId}`)
-        : Markup.button.callback(label, `deposit_menu_${userId}`),
-    ];
-  });
-  rows.push([Markup.button.callback("🏠 Main Menu", `menu_${userId}`)]);
-  return Markup.inlineKeyboard(rows);
-}
-
 // ── Admin keyboards ───────────────────────────────────────────────────────────
 
 export function adminPanelKeyboard() {
@@ -266,9 +241,6 @@ export function adminPanelKeyboard() {
     [
       Markup.button.callback("📣 Broadcast",        "admin_broadcast"),
       Markup.button.callback("🗑️ Cancel Old Bets",  "admin_cancel_bets"),
-    ],
-    [
-      Markup.button.callback("💸 Withdrawal Requests", "admin_withdrawals"),
     ],
   ]);
 }

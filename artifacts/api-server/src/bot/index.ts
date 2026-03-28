@@ -53,7 +53,6 @@ bot.telegram.setMyCommands([
   { command: "leaderboard", description: "🏆 Top players" },
   { command: "daily",      description: "🎁 Claim daily bonus (500 coins)" },
   { command: "deposit",    description: "💳 Deposit via Telegram Stars  —  /deposit 10" },
-  { command: "withdraw",   description: "💸 Withdraw coins as a Telegram Gift" },
   { command: "help",       description: "❓ Help & command list" },
   { command: "adminpanel", description: "⚙️ Admin panel (admins only)" },
 ]).then(() => {

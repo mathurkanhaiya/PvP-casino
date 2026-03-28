@@ -40,7 +40,7 @@ function isPrivateChat(ctx: Context): boolean {
 function privateChatWarning(ctx: Context) {
   const botUsername = process.env.BOT_USERNAME || "AdsRewardGameBot";
   return ctx.reply(
-    "⚠️ *Bets need a group chat\\!*\n\nPvP bets require at least 2 players in a group\\. Add the bot to a group and create bets there so opponents can join\\!\n\n_You can still use /wallet, /stats, /deposit, /withdraw, /daily here\\._",
+    "⚠️ *Bets need a group chat\\!*\n\nPvP bets require at least 2 players in a group\\. Add the bot to a group and create bets there so opponents can join\\!\n\n_You can still use /wallet, /stats, /deposit, /daily here\\._",
     {
       parse_mode: "MarkdownV2",
       ...Markup.inlineKeyboard([

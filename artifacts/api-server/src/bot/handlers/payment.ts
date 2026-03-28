@@ -1,12 +1,10 @@
 import { Telegraf, Context, Markup } from "telegraf";
 import { getUserByTelegramId, updateBalance } from "../db.js";
-import { formatBalance, mv2Num } from "../messages.js";
-import { depositMenuKeyboard, withdrawMenuKeyboard, backToMenuKeyboard } from "../keyboards.js";
-import { esc } from "../escape.js";
-import { COINS_PER_STAR, MIN_DEPOSIT_STARS, WITHDRAW_TIERS } from "../config.js";
+import { mv2Num } from "../messages.js";
+import { depositMenuKeyboard, backToMenuKeyboard } from "../keyboards.js";
+import { COINS_PER_STAR, MIN_DEPOSIT_STARS } from "../config.js";
 import { db } from "@workspace/db";
-import { depositsTable, withdrawRequestsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { depositsTable } from "@workspace/db/schema";
 
 // Pending custom deposit amounts (userId → stars)
 const pendingDeposit = new Map<number, "awaiting_amount">();
@@ -17,10 +15,6 @@ async function safeEdit(ctx: Context, text: string, extra: any) {
   } catch (e: any) {
     if (!e?.message?.includes("message is not modified")) throw e;
   }
-}
-
-function backToAdminKb() {
-  return Markup.inlineKeyboard([[Markup.button.callback("◀️ Back to Admin", "admin_panel")]]);
 }
 
 function depositInfoText() {
@@ -39,24 +33,6 @@ function depositInfoText() {
 Or tap *Custom Amount* to enter any number of stars\\.
 
 _Stars are Telegram's premium currency\\. Tap any button to open the secure payment form\\._
-`.trim();
-}
-
-function withdrawInfoText(balance: string | number) {
-  const bal = parseFloat(balance as string);
-  const rows = WITHDRAW_TIERS.map(t => {
-    const ok = bal >= t.coins;
-    return `${ok ? "✅" : "🔒"} ${mv2Num(t.coins)} → ⭐ *${t.stars} Stars*\n   _Gift: ${t.label}_`;
-  }).join("\n\n");
-
-  return `
-💸 *Withdraw — Coins → Telegram Star Gift*
-
-*Your Balance:* ${mv2Num(bal)}
-
-${rows}
-
-_Coins deducted immediately\\. Gift sent within 24 hours\\._
 `.trim();
 }
 
@@ -178,184 +154,4 @@ export function registerPaymentHandlers(bot: Telegraf<Context>) {
     return next();
   });
 
-  // ── WITHDRAW ─────────────────────────────────────────────────────────────
-
-  bot.command("withdraw", async (ctx) => {
-    if (!ctx.from) return;
-    const user = await getUserByTelegramId(ctx.from.id);
-    if (!user) return;
-    if (user.isBanned) return ctx.reply("🚫 You are banned.");
-    await ctx.reply(withdrawInfoText(user.balance), {
-      parse_mode: "MarkdownV2",
-      ...withdrawMenuKeyboard(user.balance, ctx.from.id),
-    });
-  });
-
-  bot.action(/^withdraw_menu_(\d+)$/, async (ctx) => {
-    if (!ctx.from) return;
-    const ownerId = parseInt(ctx.match[1]);
-    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Use /withdraw for your own wallet.", { show_alert: true });
-    await ctx.answerCbQuery();
-    const user = await getUserByTelegramId(ctx.from.id);
-    if (!user) return;
-    await safeEdit(ctx, withdrawInfoText(user.balance), {
-      parse_mode: "MarkdownV2",
-      ...withdrawMenuKeyboard(user.balance, ctx.from.id),
-    });
-  });
-
-  // withdraw_{coins}coins_{userId}
-  bot.action(/^withdraw_(\d+)coins_(\d+)$/, async (ctx) => {
-    if (!ctx.from) return;
-    const coins = parseInt(ctx.match[1]);
-    const ownerId = parseInt(ctx.match[2]);
-    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Not your wallet.", { show_alert: true });
-
-    const tier = WITHDRAW_TIERS.find(t => t.coins === coins);
-    if (!tier) return ctx.answerCbQuery("❌ Invalid tier", { show_alert: true });
-
-    const user = await getUserByTelegramId(ctx.from.id);
-    if (!user) return;
-    if (parseFloat(user.balance as string) < tier.coins) {
-      return ctx.answerCbQuery(
-        `❌ Need ${tier.coins.toLocaleString()} coins — you have ${Math.floor(parseFloat(user.balance as string)).toLocaleString()}.`,
-        { show_alert: true }
-      );
-    }
-
-    await ctx.answerCbQuery("✅ Request submitted!");
-    await updateBalance(ctx.from.id, -tier.coins, "withdraw_request", `Withdraw ${tier.stars}★ (${tier.label})`, undefined);
-
-    const [request] = await db.insert(withdrawRequestsTable).values({
-      userId: ctx.from.id,
-      coinsDeducted: tier.coins.toString(),
-      starsRequested: tier.stars,
-      adminNote: tier.label,   // store which gift to send
-      status: "pending",
-    } as any).returning();
-
-    const updated = await getUserByTelegramId(ctx.from.id);
-
-    await safeEdit(ctx,
-      `⏳ *Withdrawal \\#${request.id} Submitted\\!*\n\n💸 Coins deducted: ${mv2Num(tier.coins)}\n⭐ Stars: *${tier.stars}*\n🎁 Gift type: *${tier.label}*\n💰 Remaining: ${mv2Num(updated?.balance ?? 0)}\n\n_Gift will be sent within 24 hours\\._`,
-      { parse_mode: "MarkdownV2", ...backToMenuKeyboard(ctx.from.id) }
-    );
-
-    // Notify admins
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(",").map(Number) : [];
-    const userName = user.username ? `@${user.username}` : (user.firstName || `User#${user.telegramId}`);
-    for (const adminId of adminIds) {
-      try {
-        await ctx.telegram.sendMessage(adminId,
-          `💸 *Withdrawal Request \\#${request.id}*\n\n👤 ${esc(userName)} \\(\`${user.telegramId}\`\\)\n💰 ${mv2Num(tier.coins)}\n⭐ ${tier.stars} Stars\n🎁 Gift: *${tier.label}*\n\n/adminpanel → Withdrawal Requests`,
-          { parse_mode: "MarkdownV2" }
-        );
-      } catch {}
-    }
-  });
-
-  // ── ADMIN: withdraw panel ─────────────────────────────────────────────────
-
-  bot.action("admin_withdrawals", async (ctx) => {
-    await ctx.answerCbQuery();
-    if (!ctx.from) return;
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(",").map(Number) : [];
-    const me = await getUserByTelegramId(ctx.from.id);
-    if (!me?.isAdmin && !adminIds.includes(ctx.from.id)) return ctx.answerCbQuery("🚫 Access denied.", { show_alert: true });
-
-    const requests = await db.select().from(withdrawRequestsTable)
-      .where(eq(withdrawRequestsTable.status, "pending"))
-      .orderBy(desc(withdrawRequestsTable.createdAt))
-      .limit(10);
-
-    if (requests.length === 0) {
-      return safeEdit(ctx, "✅ *No pending withdrawal requests\\.*", { parse_mode: "MarkdownV2", ...backToAdminKb() });
-    }
-
-    const rows = requests.map(r => {
-      const giftInfo = r.adminNote ? ` — 🎁 ${esc(r.adminNote)}` : "";
-      return `*\\#${r.id}* · \`${r.userId}\` · ${mv2Num(r.coinsDeducted)} → ⭐${r.starsRequested}★${giftInfo}`;
-    }).join("\n");
-
-    const buttons = [
-      ...requests.map(r => [
-        Markup.button.callback(`✅ Approve #${r.id}`, `wd_approve_${r.id}`),
-        Markup.button.callback(`❌ Reject #${r.id}`,  `wd_reject_${r.id}`),
-      ]),
-      [Markup.button.callback("◀️ Back to Admin", "admin_panel")],
-    ];
-
-    await safeEdit(ctx, `💸 *Pending Withdrawals:*\n\n${rows}`, {
-      parse_mode: "MarkdownV2",
-      ...Markup.inlineKeyboard(buttons),
-    });
-  });
-
-  // Approve
-  bot.action(/^wd_approve_(\d+)$/, async (ctx) => {
-    if (!ctx.from) return;
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(",").map(Number) : [];
-    const me = await getUserByTelegramId(ctx.from.id);
-    if (!me?.isAdmin && !adminIds.includes(ctx.from.id)) return ctx.answerCbQuery("🚫 Access denied.", { show_alert: true });
-
-    const reqId = parseInt(ctx.match[1]);
-    const [req] = await db.select().from(withdrawRequestsTable).where(eq(withdrawRequestsTable.id, reqId)).limit(1);
-    if (!req || req.status !== "pending") return ctx.answerCbQuery("❌ Already processed", { show_alert: true });
-
-    await db.update(withdrawRequestsTable)
-      .set({ status: "approved", processedAt: new Date() } as any)
-      .where(eq(withdrawRequestsTable.id, reqId));
-
-    await ctx.answerCbQuery(`✅ Approved — send ${req.starsRequested}★ gift to user ${req.userId}`);
-
-    // Attempt to send gift automatically via Telegram API (if gift IDs are configured)
-    // Since gift IDs are dynamic, we notify user and admin handles manually
-    try {
-      const giftNote = req.adminNote ? ` as *${esc(req.adminNote as string)}*` : "";
-      await ctx.telegram.sendMessage(req.userId,
-        `🎉 *Withdrawal \\#${reqId} Approved\\!*\n\n⭐ *${req.starsRequested} Stars*${giftNote} will be sent to your Telegram account within a few minutes\\!\n\n_Thank you for playing\\! 🎰_`,
-        { parse_mode: "MarkdownV2" }
-      );
-    } catch {}
-
-    const giftInstruction = req.adminNote
-      ? `\n\n📋 *Send this gift to user:*\n🎁 ${esc(req.adminNote as string)}\n👤 User ID: \`${req.userId}\``
-      : "";
-
-    await safeEdit(ctx,
-      `✅ *Request \\#${reqId} Approved\\.*${giftInstruction}\n\n_Open Telegram → Search user → Send Gift_`,
-      { parse_mode: "MarkdownV2", ...backToAdminKb() }
-    );
-  });
-
-  // Reject → refund
-  bot.action(/^wd_reject_(\d+)$/, async (ctx) => {
-    if (!ctx.from) return;
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(",").map(Number) : [];
-    const me = await getUserByTelegramId(ctx.from.id);
-    if (!me?.isAdmin && !adminIds.includes(ctx.from.id)) return ctx.answerCbQuery("🚫 Access denied.", { show_alert: true });
-
-    const reqId = parseInt(ctx.match[1]);
-    const [req] = await db.select().from(withdrawRequestsTable).where(eq(withdrawRequestsTable.id, reqId)).limit(1);
-    if (!req || req.status !== "pending") return ctx.answerCbQuery("❌ Already processed", { show_alert: true });
-
-    await updateBalance(req.userId, parseFloat(req.coinsDeducted as string), "withdraw_refund", `Withdrawal #${reqId} rejected — refund`, undefined);
-    await db.update(withdrawRequestsTable)
-      .set({ status: "rejected", processedAt: new Date() } as any)
-      .where(eq(withdrawRequestsTable.id, reqId));
-
-    await ctx.answerCbQuery("❌ Rejected — coins refunded.");
-
-    try {
-      await ctx.telegram.sendMessage(req.userId,
-        `❌ *Withdrawal \\#${reqId} Rejected*\n\n${mv2Num(req.coinsDeducted)} has been refunded to your balance\\.\n\nContact an admin if you have questions\\.`,
-        { parse_mode: "MarkdownV2" }
-      );
-    } catch {}
-
-    await safeEdit(ctx,
-      `❌ *Request \\#${reqId} rejected\\. Coins refunded to \`${req.userId}\`\\.*`,
-      { parse_mode: "MarkdownV2", ...backToAdminKb() }
-    );
-  });
 }
