@@ -123,6 +123,13 @@ export async function getBet(betId: number) {
   return bets[0] || null;
 }
 
+export async function getUserPendingBetsCount(telegramId: number): Promise<number> {
+  const result = await db.select({ count: sql<number>`count(*)::int` })
+    .from(betsTable)
+    .where(and(eq(betsTable.creatorId, telegramId), eq(betsTable.status, "pending")));
+  return result[0]?.count ?? 0;
+}
+
 export async function getActiveBets(chatId: number) {
   return db.select().from(betsTable).where(
     and(eq(betsTable.chatId, chatId), or(eq(betsTable.status, "pending"), eq(betsTable.status, "active")))

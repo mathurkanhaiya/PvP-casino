@@ -1,7 +1,7 @@
 import { Telegraf, Context } from "telegraf";
 import {
   getOrCreateUser, getUserStats, getLeaderboard, getUserRecentBets,
-  claimWeeklyBonus, getUserActiveBets, cancelBetByCreator, awardXP,
+  claimWeeklyBonus, getUserActiveBets, cancelBetByCreator, awardXP, getBet,
 } from "../db.js";
 import { profileMessage, leaderboardMessage, formatBalance, mv2Num } from "../messages.js";
 import { mainMenuKeyboard, backToMenuKeyboard, privateMenuKeyboard, myBetsKeyboard } from "../keyboards.js";
@@ -164,9 +164,13 @@ export function registerStatsHandlers(bot: Telegraf<Context>) {
     if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Not your bet.", { show_alert: true });
     await ctx.answerCbQuery("Cancelling…");
 
+    const betToUnpin = await getBet(betId);
     const result = await cancelBetByCreator(betId, ctx.from.id);
     if (!result.ok) {
       return ctx.answerCbQuery(`❌ ${result.reason}`, { show_alert: true });
+    }
+    if (betToUnpin?.pinMessageId && betToUnpin?.pinChatId) {
+      try { await ctx.telegram.unpinChatMessage(betToUnpin.pinChatId as number, betToUnpin.pinMessageId as number); } catch {}
     }
 
     await ctx.answerCbQuery(`✅ Bet cancelled! 🪙${result.amount?.toLocaleString()} refunded.`);

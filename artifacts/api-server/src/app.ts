@@ -27,7 +27,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
 
-// ── DB migration (runs inline at startup — no drizzle-kit needed) ─────────────
+// ── DB migration (inline — no drizzle-kit needed at runtime) ─────────────────
 async function runMigrations() {
   logger.info("Running DB migrations...");
   await db.execute(sql`
@@ -36,16 +36,16 @@ async function runMigrations() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS "lastWeeklyAt" TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS "referredBy" INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS "totalReferrals" INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE bets ADD COLUMN IF NOT EXISTS "pinMessageId" INTEGER;
+    ALTER TABLE bets ADD COLUMN IF NOT EXISTS "pinChatId" BIGINT;
   `);
   logger.info("DB migrations done");
 }
 
 // ── Bot startup ───────────────────────────────────────────────────────────────
 async function startBot() {
-  // Run migrations first so columns always exist before handlers run
   await runMigrations();
 
-  // Verify token
   try {
     const me = await bot.telegram.getMe();
     logger.info({ username: me.username }, "Bot token verified — starting polling");
@@ -54,8 +54,16 @@ async function startBot() {
     return;
   }
 
-  // Start long polling (same as always)
-  bot.launch();
+  // Long polling — the only mode. Handle 409 gracefully (another instance running)
+  bot.launch().catch((err: any) => {
+    if (err?.response?.error_code === 409) {
+      logger.warn("Another bot instance is already polling (Railway). This instance will not handle updates.");
+    } else {
+      logger.error({ err }, "Bot polling stopped unexpectedly");
+      process.exit(1);
+    }
+  });
+
   setTimeout(() => logger.info("Bot polling is active"), 2000);
 }
 

@@ -2,6 +2,7 @@ import { Telegraf, Context, Markup } from "telegraf";
 import {
   getOrCreateUser, getUserByTelegramId, createBet, getBet,
   updateBetStatus, updateBalance, updateStreaks, getActiveBets, awardTieXP,
+  getUserPendingBetsCount,
 } from "../db.js";
 import { betCreatedMessage, betActiveMessage, formatBalance, mv2Num } from "../messages.js";
 import {
@@ -20,6 +21,47 @@ const pendingCoinflip  = new Map<number, { amount: number }>();
 const pendingBaccarat  = new Map<number, { amount: number }>();
 const pendingDragon    = new Map<number, { amount: number }>();
 const pendingEvenOdd   = new Map<number, { amount: number }>();
+
+// ── Anti-spam ─────────────────────────────────────────────────────────────────
+const PIN_THRESHOLD    = 1500;   // pin bets at or above this amount
+const BET_COOLDOWN_MS  = 10_000; // 10 s cooldown between bet creations
+const MAX_PENDING_BETS = 2;      // max simultaneous pending bets per user
+
+const lastBetTime = new Map<number, number>(); // userId → last bet timestamp
+
+async function checkSpamLimit(ctx: Context, userId: number): Promise<boolean> {
+  const now = Date.now();
+  const last = lastBetTime.get(userId) ?? 0;
+  if (now - last < BET_COOLDOWN_MS) {
+    const secs = Math.ceil((BET_COOLDOWN_MS - (now - last)) / 1000);
+    await ctx.reply(`⏳ Slow down\\! Wait *${secs}s* before creating another bet\\.`, { parse_mode: "MarkdownV2" });
+    return true; // spamming
+  }
+  const pending = await getUserPendingBetsCount(userId);
+  if (pending >= MAX_PENDING_BETS) {
+    await ctx.reply(
+      `⚠️ You already have *${pending} pending bets*\\. Accept or cancel them first\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+    return true;
+  }
+  return false;
+}
+
+async function tryPin(ctx: Context, betId: number, chatId: number, messageId: number) {
+  try {
+    await ctx.telegram.pinChatMessage(chatId, messageId, { disable_notification: true });
+    await updateBetStatus(betId, { pinMessageId: messageId, pinChatId: chatId });
+  } catch { /* no admin rights or DM — silently skip */ }
+}
+
+async function tryUnpin(ctx: Context, bet: any) {
+  if (!bet?.pinMessageId || !bet?.pinChatId) return;
+  try {
+    await ctx.telegram.unpinChatMessage(bet.pinChatId, bet.pinMessageId);
+    await updateBetStatus(bet.id, { pinMessageId: null, pinChatId: null });
+  } catch { /* silently skip */ }
+}
 
 // Maps for choice games
 const CHOICE_GAMES = ["baccarat", "dragon", "evenodd"] as const;
@@ -114,12 +156,18 @@ async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | und
     return ctx.reply(`❌ Insufficient balance\\. You need ${mv2Num(amount)} but have ${mv2Num(user.balance)}\\.`, { parse_mode: "MarkdownV2" });
   }
 
+  if (await checkSpamLimit(ctx, ctx.from.id)) return;
+
   const bet = await createBet(ctx.from.id, gameKey, amount, ctx.chat.id);
+  lastBetTime.set(ctx.from.id, Date.now());
   const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
-  await ctx.reply(betCreatedMessage(bet, creatorName, gameKey), {
+  const sent = await ctx.reply(betCreatedMessage(bet, creatorName, gameKey), {
     parse_mode: "MarkdownV2",
     ...acceptBetKeyboard(bet.id),
   });
+  if (amount >= PIN_THRESHOLD) {
+    await tryPin(ctx, bet.id, ctx.chat.id, sent.message_id);
+  }
 }
 
 export function registerPlayHandlers(bot: Telegraf<Context>) {
@@ -221,6 +269,8 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return ctx.answerCbQuery(`❌ Need ${formatBalance(amount)} — you have ${formatBalance(user.balance)}`, { show_alert: true });
     }
 
+    if (await checkSpamLimit(ctx, ctx.from.id)) return;
+
     // Choice games: show side-pick keyboard before creating bet
     if (gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
@@ -270,11 +320,16 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     }
 
     const bet = await createBet(ctx.from.id, "coinflip", pending.amount, ctx.chat.id, undefined, side);
+    lastBetTime.set(ctx.from.id, Date.now());
     const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
     await safeEdit(ctx, betCreatedMessage(bet, creatorName, "coinflip"), {
       parse_mode: "MarkdownV2",
       ...acceptBetKeyboard(bet.id),
     });
+    const msgId = (ctx.callbackQuery as any)?.message?.message_id;
+    if (pending.amount >= PIN_THRESHOLD && msgId) {
+      await tryPin(ctx, bet.id, ctx.chat.id, msgId);
+    }
   });
 
   // Baccarat side pick: bacpick_{player|banker}_{userId}
@@ -292,10 +347,13 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
     }
     const bet = await createBet(ctx.from.id, "baccarat", pending.amount, ctx.chat.id, undefined, side);
+    lastBetTime.set(ctx.from.id, Date.now());
     const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
     await safeEdit(ctx, betCreatedMessage(bet, creatorName, "baccarat"), {
       parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
     });
+    const msgId = (ctx.callbackQuery as any)?.message?.message_id;
+    if (pending.amount >= PIN_THRESHOLD && msgId) await tryPin(ctx, bet.id, ctx.chat.id, msgId);
   });
 
   // Dragon Tiger pick: drpick_{dragon|tiger}_{userId}
@@ -313,10 +371,13 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
     }
     const bet = await createBet(ctx.from.id, "dragon", pending.amount, ctx.chat.id, undefined, side);
+    lastBetTime.set(ctx.from.id, Date.now());
     const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
     await safeEdit(ctx, betCreatedMessage(bet, creatorName, "dragon"), {
       parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
     });
+    const msgId = (ctx.callbackQuery as any)?.message?.message_id;
+    if (pending.amount >= PIN_THRESHOLD && msgId) await tryPin(ctx, bet.id, ctx.chat.id, msgId);
   });
 
   // Even/Odd pick: eopick_{even|odd}_{userId}
@@ -334,10 +395,13 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
     }
     const bet = await createBet(ctx.from.id, "evenodd", pending.amount, ctx.chat.id, undefined, side);
+    lastBetTime.set(ctx.from.id, Date.now());
     const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
     await safeEdit(ctx, betCreatedMessage(bet, creatorName, "evenodd"), {
       parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
     });
+    const msgId = (ctx.callbackQuery as any)?.message?.message_id;
+    if (pending.amount >= PIN_THRESHOLD && msgId) await tryPin(ctx, bet.id, ctx.chat.id, msgId);
   });
 
   // Custom amount: betcustom_{gameKey}_{userId}
@@ -382,6 +446,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     await updateBalance(bet.creatorId, -amount, "bet_placed", `Bet #${betId}`, betId);
     await updateBalance(ctx.from.id, -amount, "bet_placed", `Bet #${betId}`, betId);
     await updateBetStatus(betId, { status: "active", challengerId: ctx.from.id });
+    await tryUnpin(ctx, bet);
 
     const gameKey = bet.gameType as GameType;
     const game = GAMES[gameKey];
@@ -547,6 +612,7 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     if (!bet) return ctx.answerCbQuery("❌ Bet not found", { show_alert: true });
     if (bet.creatorId !== ctx.from.id) return ctx.answerCbQuery("❌ Only the creator can cancel", { show_alert: true });
     if (bet.status !== "pending") return ctx.answerCbQuery("❌ Cannot cancel active bet", { show_alert: true });
+    await tryUnpin(ctx, bet);
     await updateBetStatus(betId, { status: "cancelled" });
     await ctx.answerCbQuery("✅ Bet cancelled");
     await safeEdit(ctx, "❌ *Bet Cancelled*\n\nNo funds were deducted\\.", { parse_mode: "MarkdownV2" });
@@ -754,10 +820,15 @@ async function doCreateBet(ctx: Context, gameKey: GameType, amount: number) {
   if (!user) return;
 
   const bet = await createBet(ctx.from.id, gameKey, amount, ctx.chat.id);
+  lastBetTime.set(ctx.from.id, Date.now());
   const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
 
   await safeEdit(ctx, betCreatedMessage(bet, creatorName, gameKey), {
     parse_mode: "MarkdownV2",
     ...acceptBetKeyboard(bet.id),
   });
+  const msgId = (ctx.callbackQuery as any)?.message?.message_id;
+  if (amount >= PIN_THRESHOLD && msgId) {
+    await tryPin(ctx, bet.id, ctx.chat.id, msgId);
+  }
 }
