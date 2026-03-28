@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const gameTypeEnum = pgEnum("game_type", [
   "dice", "darts", "football", "bowling", "basketball",
   "slots", "coinflip", "rps",
+  "highcard", "baccarat", "dragon", "evenodd", "lucky7", "wheel",
 ]);
 export const betStatusEnum = pgEnum("bet_status", ["pending", "active", "completed", "cancelled", "expired"]);
 export const withdrawStatusEnum = pgEnum("withdraw_status", ["pending", "approved", "rejected"]);

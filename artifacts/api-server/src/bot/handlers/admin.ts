@@ -283,6 +283,48 @@ export function registerAdminHandlers(bot: Telegraf<Context>) {
     await ctx.reply(`Enter amount to ADD to user \`${targetId}\` \\(negative to subtract\\):`, { parse_mode: "MarkdownV2" });
   });
 
+  // /add {userId} {amount} — admin shortcut to add coins
+  bot.command("add", async (ctx) => {
+    if (!ctx.from) return;
+    const admin = await checkAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("🚫 Access denied. Admin only.");
+    const parts = ctx.message.text.trim().split(/\s+/);
+    const uid = parseInt(parts[1]);
+    const amount = parseFloat(parts[2]);
+    if (isNaN(uid) || isNaN(amount) || amount <= 0) {
+      return ctx.reply("❌ Usage: `/add userId amount`\nExample: `/add 123456789 500`", { parse_mode: "MarkdownV2" });
+    }
+    const user = await getUserByTelegramId(uid);
+    if (!user) return ctx.reply("❌ User not found\\.", { parse_mode: "MarkdownV2" });
+    const newBal = parseFloat(user.balance as string) + amount;
+    await setAdminBalance(uid, newBal);
+    await ctx.reply(
+      `✅ *Added ${formatBalance(amount)} to user* \`${uid}\`\n📜 New balance: ${formatBalance(newBal)}`,
+      { parse_mode: "MarkdownV2" }
+    );
+  });
+
+  // /remove {userId} {amount} — admin shortcut to remove coins
+  bot.command("remove", async (ctx) => {
+    if (!ctx.from) return;
+    const admin = await checkAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("🚫 Access denied. Admin only.");
+    const parts = ctx.message.text.trim().split(/\s+/);
+    const uid = parseInt(parts[1]);
+    const amount = parseFloat(parts[2]);
+    if (isNaN(uid) || isNaN(amount) || amount <= 0) {
+      return ctx.reply("❌ Usage: `/remove userId amount`\nExample: `/remove 123456789 500`", { parse_mode: "MarkdownV2" });
+    }
+    const user = await getUserByTelegramId(uid);
+    if (!user) return ctx.reply("❌ User not found\\.", { parse_mode: "MarkdownV2" });
+    const newBal = Math.max(0, parseFloat(user.balance as string) - amount);
+    await setAdminBalance(uid, newBal);
+    await ctx.reply(
+      `✅ *Removed ${formatBalance(amount)} from user* \`${uid}\`\n📜 New balance: ${formatBalance(newBal)}`,
+      { parse_mode: "MarkdownV2" }
+    );
+  });
+
   // Admin text handler — skip if user is sending a command
   bot.on("text", async (ctx, next) => {
     if (!ctx.from) return next();

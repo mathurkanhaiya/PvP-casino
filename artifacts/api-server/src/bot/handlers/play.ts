@@ -7,6 +7,7 @@ import { betCreatedMessage, betActiveMessage, formatBalance, mv2Num } from "../m
 import {
   gameSelectKeyboard, betAmountKeyboard, coinflipPickKeyboard,
   acceptBetKeyboard, activeBetsKeyboard, backToMenuKeyboard, rpsPickKeyboard,
+  baccaratPickKeyboard, dragonPickKeyboard, evenoddPickKeyboard,
 } from "../keyboards.js";
 import { GAMES, GameType, MIN_BET, MAX_BET } from "../config.js";
 import { esc } from "../escape.js";
@@ -15,8 +16,14 @@ import { usersTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 const pendingCustomBets = new Map<number, { gameKey: GameType }>();
-// For coinflip: track which amount the user chose before picking H/T
-const pendingCoinflip = new Map<number, { amount: number }>();
+const pendingCoinflip  = new Map<number, { amount: number }>();
+const pendingBaccarat  = new Map<number, { amount: number }>();
+const pendingDragon    = new Map<number, { amount: number }>();
+const pendingEvenOdd   = new Map<number, { amount: number }>();
+
+// Maps for choice games
+const CHOICE_GAMES = ["baccarat", "dragon", "evenodd"] as const;
+type ChoiceGame = typeof CHOICE_GAMES[number];
 
 async function safeEdit(ctx: Context, text: string, extra: any) {
   try {
@@ -58,11 +65,23 @@ async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | und
 
   const game = GAMES[gameKey];
 
-  // Coin flip requires picking H/T first — show amount keyboard then H/T pick
-  if (gameKey === "coinflip") {
+  // Choice games: coinflip, baccarat, dragon, evenodd require picking a side first
+  const PICK_KEYBOARDS: Record<string, (uid: number) => ReturnType<typeof Markup.inlineKeyboard>> = {
+    coinflip: coinflipPickKeyboard,
+    baccarat: baccaratPickKeyboard,
+    dragon:   dragonPickKeyboard,
+    evenodd:  evenoddPickKeyboard,
+  };
+  const PICK_PENDING_MAPS: Record<string, Map<number, { amount: number }>> = {
+    coinflip: pendingCoinflip,
+    baccarat: pendingBaccarat,
+    dragon:   pendingDragon,
+    evenodd:  pendingEvenOdd,
+  };
+  if (gameKey in PICK_KEYBOARDS) {
     if (!rawAmount || rawAmount.trim() === "") {
       return ctx.reply(
-        `${game.emoji} *Coin Flip — Pick Amount*\n\nUsage: \`/coinflip <amount>\`\n\nRange: ${mv2Num(MIN_BET)} — ${mv2Num(MAX_BET)}`,
+        `${game.emoji} *${game.name} — Pick Amount*\n\nUsage: \`/${gameKey} <amount>\`\n\nRange: ${mv2Num(MIN_BET)} — ${mv2Num(MAX_BET)}`,
         { parse_mode: "MarkdownV2", ...betAmountKeyboard(gameKey, ctx.from.id) }
       );
     }
@@ -73,10 +92,10 @@ async function quickBet(ctx: Context, gameKey: GameType, rawAmount: string | und
     if (parseFloat(user.balance as string) < amount) {
       return ctx.reply(`❌ Insufficient balance\\. You need ${mv2Num(amount)}\\.`, { parse_mode: "MarkdownV2" });
     }
-    pendingCoinflip.set(ctx.from.id, { amount });
-    return ctx.reply(`🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
+    PICK_PENDING_MAPS[gameKey].set(ctx.from.id, { amount });
+    return ctx.reply(`${game.emoji} *${game.name} — ${mv2Num(amount)}*\n\nChoose your side:`, {
       parse_mode: "MarkdownV2",
-      ...coinflipPickKeyboard(ctx.from.id),
+      ...PICK_KEYBOARDS[gameKey](ctx.from.id),
     });
   }
 
@@ -125,6 +144,12 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
   bot.command("slots",      ctx => quickBet(ctx, "slots",      ctx.message.text.split(" ").slice(1).join(" ")));
   bot.command("coinflip",   ctx => quickBet(ctx, "coinflip",   ctx.message.text.split(" ").slice(1).join(" ")));
   bot.command("rps",        ctx => quickBet(ctx, "rps",        ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("highcard",   ctx => quickBet(ctx, "highcard",   ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("baccarat",   ctx => quickBet(ctx, "baccarat",   ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("dragon",     ctx => quickBet(ctx, "dragon",     ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("evenodd",    ctx => quickBet(ctx, "evenodd",    ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("lucky7",     ctx => quickBet(ctx, "lucky7",     ctx.message.text.split(" ").slice(1).join(" ")));
+  bot.command("wheel",      ctx => quickBet(ctx, "wheel",      ctx.message.text.split(" ").slice(1).join(" ")));
   // ────────────────────────────────────────────────────────────────────────
 
   // play_{userId}
@@ -196,12 +221,29 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return ctx.answerCbQuery(`❌ Need ${formatBalance(amount)} — you have ${formatBalance(user.balance)}`, { show_alert: true });
     }
 
-    // Coinflip: store amount, show H/T picker instead
+    // Choice games: show side-pick keyboard before creating bet
     if (gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
       return safeEdit(ctx, `🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
-        parse_mode: "MarkdownV2",
-        ...coinflipPickKeyboard(ctx.from.id),
+        parse_mode: "MarkdownV2", ...coinflipPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "baccarat") {
+      pendingBaccarat.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `🀄 *Baccarat — ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...baccaratPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "dragon") {
+      pendingDragon.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `🐉 *Dragon Tiger — ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...dragonPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "evenodd") {
+      pendingEvenOdd.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `⚡ *Even \\/ Odd — ${mv2Num(amount)}*\n\nChoose your prediction:`, {
+        parse_mode: "MarkdownV2", ...evenoddPickKeyboard(ctx.from.id),
       });
     }
 
@@ -232,6 +274,69 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     await safeEdit(ctx, betCreatedMessage(bet, creatorName, "coinflip"), {
       parse_mode: "MarkdownV2",
       ...acceptBetKeyboard(bet.id),
+    });
+  });
+
+  // Baccarat side pick: bacpick_{player|banker}_{userId}
+  bot.action(/^bacpick_(player|banker)_(\d+)$/, async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    const side = ctx.match[1] as "player" | "banker";
+    const ownerId = parseInt(ctx.match[2]);
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Not your bet.", { show_alert: true });
+    const pending = pendingBaccarat.get(ctx.from.id);
+    if (!pending) return ctx.answerCbQuery("❌ Session expired, start over.", { show_alert: true });
+    pendingBaccarat.delete(ctx.from.id);
+    await ctx.answerCbQuery(`You picked ${side === "player" ? "🎰 Player" : "🏦 Banker"}`);
+    const user = await getUserByTelegramId(ctx.from.id);
+    if (!user || parseFloat(user.balance as string) < pending.amount) {
+      return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
+    }
+    const bet = await createBet(ctx.from.id, "baccarat", pending.amount, ctx.chat.id, undefined, side);
+    const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
+    await safeEdit(ctx, betCreatedMessage(bet, creatorName, "baccarat"), {
+      parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
+    });
+  });
+
+  // Dragon Tiger pick: drpick_{dragon|tiger}_{userId}
+  bot.action(/^drpick_(dragon|tiger)_(\d+)$/, async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    const side = ctx.match[1] as "dragon" | "tiger";
+    const ownerId = parseInt(ctx.match[2]);
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Not your bet.", { show_alert: true });
+    const pending = pendingDragon.get(ctx.from.id);
+    if (!pending) return ctx.answerCbQuery("❌ Session expired, start over.", { show_alert: true });
+    pendingDragon.delete(ctx.from.id);
+    await ctx.answerCbQuery(`You picked ${side === "dragon" ? "🐉 Dragon" : "🐯 Tiger"}`);
+    const user = await getUserByTelegramId(ctx.from.id);
+    if (!user || parseFloat(user.balance as string) < pending.amount) {
+      return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
+    }
+    const bet = await createBet(ctx.from.id, "dragon", pending.amount, ctx.chat.id, undefined, side);
+    const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
+    await safeEdit(ctx, betCreatedMessage(bet, creatorName, "dragon"), {
+      parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
+    });
+  });
+
+  // Even/Odd pick: eopick_{even|odd}_{userId}
+  bot.action(/^eopick_(even|odd)_(\d+)$/, async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    const side = ctx.match[1] as "even" | "odd";
+    const ownerId = parseInt(ctx.match[2]);
+    if (ctx.from.id !== ownerId) return ctx.answerCbQuery("⚠️ Not your bet.", { show_alert: true });
+    const pending = pendingEvenOdd.get(ctx.from.id);
+    if (!pending) return ctx.answerCbQuery("❌ Session expired, start over.", { show_alert: true });
+    pendingEvenOdd.delete(ctx.from.id);
+    await ctx.answerCbQuery(`You picked ${side === "even" ? "2️⃣ Even" : "1️⃣ Odd"}`);
+    const user = await getUserByTelegramId(ctx.from.id);
+    if (!user || parseFloat(user.balance as string) < pending.amount) {
+      return safeEdit(ctx, `❌ Insufficient balance\\.`, { parse_mode: "MarkdownV2" });
+    }
+    const bet = await createBet(ctx.from.id, "evenodd", pending.amount, ctx.chat.id, undefined, side);
+    const creatorName = user.username ? `@${user.username}` : (user.firstName || "Player");
+    await safeEdit(ctx, betCreatedMessage(bet, creatorName, "evenodd"), {
+      parse_mode: "MarkdownV2", ...acceptBetKeyboard(bet.id),
     });
   });
 
@@ -328,6 +433,92 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
       return;
     }
 
+    // ── New instant games: resolve on accept ─────────────────────────
+    const INSTANT_GAMES = ["highcard", "baccarat", "dragon", "evenodd", "lucky7", "wheel"];
+    if (INSTANT_GAMES.includes(gameKey)) {
+      let cScore = 0, chScore = 0;
+      let winnerId: number | null = null;
+      let winnerName: string | null = null;
+      let challengerChoice = "";
+
+      if (gameKey === "highcard") {
+        cScore  = Math.floor(Math.random() * 13) + 1;
+        chScore = Math.floor(Math.random() * 13) + 1;
+        if (cScore === chScore) {
+          cScore  = Math.floor(Math.random() * 13) + 1;
+          chScore = Math.floor(Math.random() * 13) + 1;
+        }
+        if (cScore >= chScore) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else                   { winnerId = ctx.from.id;   winnerName = challengerName; }
+
+      } else if (gameKey === "baccarat") {
+        cScore  = Math.floor(Math.random() * 10); // Player val 0-9
+        chScore = Math.floor(Math.random() * 10); // Banker val 0-9
+        challengerChoice = bet.creatorChoice === "player" ? "banker" : "player";
+        const playerWins = cScore >= chScore; // tie → player wins
+        const winnerSide = playerWins ? "player" : "banker";
+        if (bet.creatorChoice === winnerSide) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else                                  { winnerId = ctx.from.id;   winnerName = challengerName; }
+
+      } else if (gameKey === "dragon") {
+        cScore  = Math.floor(Math.random() * 13) + 1; // card 1–13
+        chScore = cScore;
+        challengerChoice = bet.creatorChoice === "dragon" ? "tiger" : "dragon";
+        const resultSide = cScore >= 7 ? "dragon" : "tiger";
+        if (bet.creatorChoice === resultSide) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else                                  { winnerId = ctx.from.id;   winnerName = challengerName; }
+
+      } else if (gameKey === "evenodd") {
+        cScore  = Math.floor(Math.random() * 6) + 1; // die 1–6
+        chScore = cScore;
+        challengerChoice = bet.creatorChoice === "even" ? "odd" : "even";
+        const parity = cScore % 2 === 0 ? "even" : "odd";
+        if (bet.creatorChoice === parity) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else                              { winnerId = ctx.from.id;   winnerName = challengerName; }
+
+      } else if (gameKey === "lucky7") {
+        cScore  = Math.floor(Math.random() * 13) + 1;
+        chScore = Math.floor(Math.random() * 13) + 1;
+        const d1 = Math.abs(7 - cScore), d2 = Math.abs(7 - chScore);
+        if (d1 <= d2) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else          { winnerId = ctx.from.id;   winnerName = challengerName; }
+
+      } else if (gameKey === "wheel") {
+        cScore  = Math.floor(Math.random() * 8) + 1;
+        chScore = Math.floor(Math.random() * 8) + 1;
+        if (cScore >= chScore) { winnerId = bet.creatorId; winnerName = creatorName; }
+        else                   { winnerId = ctx.from.id;   winnerName = challengerName; }
+      }
+
+      await updateBetStatus(betId, {
+        status: "completed",
+        challengerId: ctx.from.id,
+        challengerChoice: challengerChoice || undefined,
+        creatorScore: cScore,
+        challengerScore: chScore,
+        winnerId,
+        completedAt: new Date(),
+      });
+
+      if (winnerId) {
+        await updateBalance(winnerId, amount * 2, "bet_win", `Won bet #${betId}`, betId);
+        const loserId = winnerId === bet.creatorId ? ctx.from.id : bet.creatorId;
+        await db.update(usersTable).set({ totalWins: sql`total_wins + 1`, totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}`, totalWon: sql`CAST(total_won AS DECIMAL) + ${amount * 2}` }).where(eq(usersTable.telegramId, winnerId));
+        await db.update(usersTable).set({ totalLosses: sql`total_losses + 1`, totalBets: sql`total_bets + 1`, totalWagered: sql`CAST(total_wagered AS DECIMAL) + ${amount}` }).where(eq(usersTable.telegramId, loserId));
+        await updateStreaks(winnerId, loserId);
+      }
+
+      await ctx.answerCbQuery(`${game.emoji} Game resolved!`);
+      const updBet = await getBet(betId);
+      const { betResultMessage } = await import("../messages.js");
+      const { rematchKeyboard } = await import("../keyboards.js");
+      await safeEdit(ctx, betResultMessage(updBet!, creatorName, challengerName, winnerName, gameKey), {
+        parse_mode: "MarkdownV2",
+        ...rematchKeyboard(gameKey, amount, ctx.from.id),
+      });
+      return;
+    }
+
     // ── RPS: both players pick via buttons ───────────────────────────
     if (gameKey === "rps") {
       await ctx.answerCbQuery("🤜 Make your move!");
@@ -399,8 +590,25 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     if (gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
       return safeEdit(ctx, `🪙 *Rematch — Coin Flip ${mv2Num(amount)}*\n\nPick your side:`, {
-        parse_mode: "MarkdownV2",
-        ...coinflipPickKeyboard(ctx.from.id),
+        parse_mode: "MarkdownV2", ...coinflipPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "baccarat") {
+      pendingBaccarat.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `🀄 *Rematch — Baccarat ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...baccaratPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "dragon") {
+      pendingDragon.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `🐉 *Rematch — Dragon Tiger ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...dragonPickKeyboard(ctx.from.id),
+      });
+    }
+    if (gameKey === "evenodd") {
+      pendingEvenOdd.set(ctx.from.id, { amount });
+      return safeEdit(ctx, `⚡ *Rematch — Even \\/Odd ${mv2Num(amount)}*\n\nChoose your prediction:`, {
+        parse_mode: "MarkdownV2", ...evenoddPickKeyboard(ctx.from.id),
       });
     }
 
@@ -508,8 +716,25 @@ export function registerPlayHandlers(bot: Telegraf<Context>) {
     if (pending.gameKey === "coinflip") {
       pendingCoinflip.set(ctx.from.id, { amount });
       return ctx.reply(`🪙 *Coin Flip — ${mv2Num(amount)}*\n\nWhich side do you pick?`, {
-        parse_mode: "MarkdownV2",
-        ...coinflipPickKeyboard(ctx.from.id),
+        parse_mode: "MarkdownV2", ...coinflipPickKeyboard(ctx.from.id),
+      });
+    }
+    if (pending.gameKey === "baccarat") {
+      pendingBaccarat.set(ctx.from.id, { amount });
+      return ctx.reply(`🀄 *Baccarat — ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...baccaratPickKeyboard(ctx.from.id),
+      });
+    }
+    if (pending.gameKey === "dragon") {
+      pendingDragon.set(ctx.from.id, { amount });
+      return ctx.reply(`🐉 *Dragon Tiger — ${mv2Num(amount)}*\n\nChoose your side:`, {
+        parse_mode: "MarkdownV2", ...dragonPickKeyboard(ctx.from.id),
+      });
+    }
+    if (pending.gameKey === "evenodd") {
+      pendingEvenOdd.set(ctx.from.id, { amount });
+      return ctx.reply(`⚡ *Even \\/Odd — ${mv2Num(amount)}*\n\nChoose your prediction:`, {
+        parse_mode: "MarkdownV2", ...evenoddPickKeyboard(ctx.from.id),
       });
     }
 

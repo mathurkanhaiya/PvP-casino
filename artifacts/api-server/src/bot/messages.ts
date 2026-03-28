@@ -138,14 +138,24 @@ ${profitEmoji} *Profit/Loss:* ${profitStr}
 export function betCreatedMessage(bet: Bet, creatorDisplayName: string, gameKey: GameType) {
   const game = GAMES[gameKey];
   const safeCreator = esc(creatorDisplayName);
-  const choiceNote = gameKey === "coinflip" && bet.creatorChoice
-    ? `\n🪙 Creator picked: *${bet.creatorChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}*`
+  const CHOICE_LABELS: Record<string, Record<string, string>> = {
+    coinflip: { heads: "🌕 Heads", tails: "🌑 Tails" },
+    baccarat: { player: "🎰 Player", banker: "🏦 Banker" },
+    dragon:   { dragon: "🐉 Dragon", tiger: "🐯 Tiger" },
+    evenodd:  { even: "2️⃣ Even", odd: "1️⃣ Odd" },
+  };
+  const choiceLabel = CHOICE_LABELS[gameKey]?.[bet.creatorChoice || ""] || bet.creatorChoice || "";
+  const choiceNote = choiceLabel
+    ? `\n${game.emoji} Creator picked: *${choiceLabel}*`
     : "";
+  const INSTANT_GAMES = ["highcard", "baccarat", "dragon", "evenodd", "lucky7", "wheel"];
   const playNote = game.isDice
     ? `_Both players send ${game.telegramEmoji} after accepting_`
-    : gameKey === "coinflip"
-      ? `_Coin flips instantly when opponent accepts\\!_`
-      : `_Both players pick via buttons after accepting\\!_`;
+    : gameKey === "rps"
+      ? `_Both players pick via buttons after accepting\\!_`
+      : INSTANT_GAMES.includes(gameKey)
+        ? `_Resolves instantly when opponent accepts\\!_`
+        : `_Coin flips instantly when opponent accepts\\!_`;
 
   return `
 ${game.emoji} *New PvP Bet — ${game.name}\\!*
@@ -164,11 +174,14 @@ export function betActiveMessage(bet: Bet, creatorDisplayName: string, challenge
   const game = GAMES[gameKey];
   const c1 = esc(creatorDisplayName);
   const c2 = esc(challengerDisplayName);
+  const INSTANT_GAMES2 = ["highcard", "baccarat", "dragon", "evenodd", "lucky7", "wheel"];
   const instrLine = game.isDice
     ? `🎲 Both players — send the ${game.telegramEmoji} emoji now\\!`
     : gameKey === "rps"
       ? `🤜 Both players — pick your move below\\!`
-      : `🪙 Coin is in the air\\.\\.\\.`;
+      : INSTANT_GAMES2.includes(gameKey)
+        ? `${game.emoji} Resolving now\\.\\.\\.`
+        : `🪙 Coin is in the air\\.\\.\\.`;
 
   return `
 ${game.emoji} *PvP Battle Started\\!*
@@ -197,12 +210,37 @@ export function betResultMessage(
     ? "🤝 *It's a tie\\! Both players refunded\\!*"
     : `🏆 *${esc(winnerDisplayName!)} wins ${mv2Num(Number(bet.amount) * 2)}\\!*`;
 
+  const cardStr = (n: number) => n === 1 ? "A" : n === 11 ? "J" : n === 12 ? "Q" : n === 13 ? "K" : `${n}`;
   let scoresLine = "";
   if (gameKey === "coinflip") {
     scoresLine = `🪙 Result: *${bet.creatorScore === 1 ? "🌕 Heads" : "🌑 Tails"}*\n👤 ${c1} picked: ${bet.creatorChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}\n👤 ${c2} picked: ${bet.challengerChoice === "heads" ? "🌕 Heads" : "🌑 Tails"}`;
   } else if (gameKey === "rps") {
     const emojiMap: Record<string, string> = { rock: "🪨", paper: "📄", scissors: "✂️" };
     scoresLine = `👤 ${c1}: ${emojiMap[bet.creatorChoice || ""] || "?"} ${bet.creatorChoice || "?"}\n👤 ${c2}: ${emojiMap[bet.challengerChoice || ""] || "?"} ${bet.challengerChoice || "?"}`;
+  } else if (gameKey === "highcard") {
+    scoresLine = `🃏 Cards drawn:\n👤 ${c1}: *${cardStr(bet.creatorScore ?? 0)}* \\(${bet.creatorScore ?? "?"}\\)\n👤 ${c2}: *${cardStr(bet.challengerScore ?? 0)}* \\(${bet.challengerScore ?? "?"}\\)`;
+  } else if (gameKey === "baccarat") {
+    const playerLabel = c1 && bet.creatorChoice === "player" ? c1 : c2;
+    const bankerLabel = c1 && bet.creatorChoice === "player" ? c2 : c1;
+    scoresLine = `🀄 *Player: ${bet.creatorScore ?? "?"}* \\| *Banker: ${bet.challengerScore ?? "?"}*\n🎰 ${playerLabel} → Player \\| 🏦 ${bankerLabel} → Banker`;
+  } else if (gameKey === "dragon") {
+    const card = bet.creatorScore ?? 0;
+    const resultSide = card >= 7 ? "🐉 Dragon" : "🐯 Tiger";
+    const pickedC1 = bet.creatorChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger";
+    const pickedC2 = bet.challengerChoice === "dragon" ? "🐉 Dragon" : "🐯 Tiger";
+    scoresLine = `🐉 Card drawn: *${card}* → *${resultSide} wins\\!*\n👤 ${c1} → ${pickedC1} \\| 👤 ${c2} → ${pickedC2}`;
+  } else if (gameKey === "evenodd") {
+    const roll = bet.creatorScore ?? 0;
+    const parity = roll % 2 === 0 ? "2️⃣ Even" : "1️⃣ Odd";
+    const pickedC1 = bet.creatorChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd";
+    const pickedC2 = bet.challengerChoice === "even" ? "2️⃣ Even" : "1️⃣ Odd";
+    scoresLine = `⚡ Die rolled: *${roll}* → *${parity}\\!*\n👤 ${c1} → ${pickedC1} \\| 👤 ${c2} → ${pickedC2}`;
+  } else if (gameKey === "lucky7") {
+    const d1 = Math.abs(7 - (bet.creatorScore ?? 0));
+    const d2 = Math.abs(7 - (bet.challengerScore ?? 0));
+    scoresLine = `🔢 Closest to 7:\n👤 ${c1}: *${bet.creatorScore ?? "?"}* \\(Δ${d1}\\)\n👤 ${c2}: *${bet.challengerScore ?? "?"}* \\(Δ${d2}\\)`;
+  } else if (gameKey === "wheel") {
+    scoresLine = `🎡 Wheel results:\n👤 ${c1}: *${bet.creatorScore ?? "?"}*\n👤 ${c2}: *${bet.challengerScore ?? "?"}*`;
   } else {
     scoresLine = `📊 *Scores:*\n👤 ${c1}: *${bet.creatorScore ?? "?"}*\n👤 ${c2}: *${bet.challengerScore ?? "?"}*`;
   }

@@ -30,7 +30,7 @@ export function mainMenuKeyboard(userId: number) {
       Markup.button.callback("❓ Help", `help_${userId}`),
       Markup.button.url("➕ Add to Group", `https://t.me/${botUsername}?startgroup=true`),
     ],
-    // Quick game emoji row — dice games
+    // Quick game rows — dice & classic
     [
       Markup.button.callback("🎲", `game_dice_${userId}`),
       Markup.button.callback("🎯", `game_darts_${userId}`),
@@ -38,12 +38,40 @@ export function mainMenuKeyboard(userId: number) {
       Markup.button.callback("🎳", `game_bowling_${userId}`),
       Markup.button.callback("🏀", `game_basketball_${userId}`),
     ],
-    // Quick game row — special games
     [
       Markup.button.callback("🎰", `game_slots_${userId}`),
       Markup.button.callback("🪙", `game_coinflip_${userId}`),
       Markup.button.callback("🤜", `game_rps_${userId}`),
     ],
+    // Quick game rows — new games
+    [
+      Markup.button.callback("🃏", `game_highcard_${userId}`),
+      Markup.button.callback("🀄", `game_baccarat_${userId}`),
+      Markup.button.callback("🐉", `game_dragon_${userId}`),
+      Markup.button.callback("⚡", `game_evenodd_${userId}`),
+      Markup.button.callback("🔢", `game_lucky7_${userId}`),
+      Markup.button.callback("🎡", `game_wheel_${userId}`),
+    ],
+  ]);
+}
+
+export function privateMenuKeyboard(userId: number) {
+  const botUsername = process.env.BOT_USERNAME || "AdsRewardGameBot";
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("💳 Deposit ⭐",  `deposit_menu_${userId}`),
+      Markup.button.callback("💸 Withdraw 🎁",  `withdraw_menu_${userId}`),
+    ],
+    [
+      Markup.button.callback("📜 Wallet",       `wallet_${userId}`),
+      Markup.button.callback("📊 My Stats",     `stats_${userId}`),
+    ],
+    [
+      Markup.button.callback("🏆 Leaderboard",  `leaderboard_${userId}`),
+      Markup.button.callback("🎁 Daily Bonus",  `daily_${userId}`),
+    ],
+    [Markup.button.callback("❓ Help", `help_${userId}`)],
+    [Markup.button.url("➕  ADD BOT TO YOUR GROUP  ➕", `https://t.me/${botUsername}?startgroup=true`)],
   ]);
 }
 
@@ -65,7 +93,49 @@ export function gameSelectKeyboard(userId: number) {
       Markup.button.callback("🪙 Coin Flip",          `game_coinflip_${userId}`),
       Markup.button.callback("🤜 Rock Paper Scissors", `game_rps_${userId}`),
     ],
+    [
+      Markup.button.callback("🃏 High Card",    `game_highcard_${userId}`),
+      Markup.button.callback("🀄 Baccarat",     `game_baccarat_${userId}`),
+    ],
+    [
+      Markup.button.callback("🐉 Dragon Tiger", `game_dragon_${userId}`),
+      Markup.button.callback("⚡ Even / Odd",   `game_evenodd_${userId}`),
+    ],
+    [
+      Markup.button.callback("🔢 Lucky 7",      `game_lucky7_${userId}`),
+      Markup.button.callback("🎡 Wheel Spin",   `game_wheel_${userId}`),
+    ],
     [Markup.button.callback("❌ Cancel", `cancel_menu_${userId}`)],
+  ]);
+}
+
+export function baccaratPickKeyboard(userId: number) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("🎰 Player", `bacpick_player_${userId}`),
+      Markup.button.callback("🏦 Banker", `bacpick_banker_${userId}`),
+    ],
+    [Markup.button.callback("◀️ Back", `play_${userId}`)],
+  ]);
+}
+
+export function dragonPickKeyboard(userId: number) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("🐉 Dragon", `drpick_dragon_${userId}`),
+      Markup.button.callback("🐯 Tiger",  `drpick_tiger_${userId}`),
+    ],
+    [Markup.button.callback("◀️ Back", `play_${userId}`)],
+  ]);
+}
+
+export function evenoddPickKeyboard(userId: number) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("2️⃣ Even", `eopick_even_${userId}`),
+      Markup.button.callback("1️⃣ Odd",  `eopick_odd_${userId}`),
+    ],
+    [Markup.button.callback("◀️ Back", `play_${userId}`)],
   ]);
 }
 
