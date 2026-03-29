@@ -17,9 +17,9 @@ Set these in your Railway project dashboard under **Variables**.
 
 | Variable | Description |
 |----------|-------------|
-| `TG_API_ID` | `38239977` |
+| `TG_API_ID` | `xxxxx` |
 | `TG_API_HASH` | Your Telegram API hash (from my.telegram.org) |
-| `TG_PHONE` | `+919992055970` |
+| `TG_PHONE` | `+91xxxxxxx` |
 | `TG_SESSION` | GramJS session string — generate with `/usdt_setup` command in bot DM |
 | `CASINO_ACCOUNT` | `AdsRewardCasino` |
 | `CWALLET_BOT` | `cctip_bot` |
