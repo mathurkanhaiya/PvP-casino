@@ -9,6 +9,11 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base
 COPY lib/ ./lib/
 COPY artifacts/api-server/ ./artifacts/api-server/
 
+# Allow pnpm install scripts during the image build so the install step succeeds in CI/Docker.
+# NOTE: This approves all install scripts. For a more secure solution, generate and commit
+# .pnpm-allowlist.yaml by running `pnpm approve-builds` locally and copy it into the image instead.
+ENV PNPM_APPROVE_BUILDS=1
+
 RUN pnpm install --frozen-lockfile
 
 RUN pnpm --filter @workspace/api-server run build
