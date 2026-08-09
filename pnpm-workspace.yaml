@@ -72,6 +72,10 @@ onlyBuiltDependencies:
   - esbuild
   - msw
   - unrs-resolver
+  - esbuild
+  - bufferutil
+  - utf-8-validate
+  - es5-ext
 
 overrides:
   # replit uses linux-x64 only, we can exclude all other platforms
