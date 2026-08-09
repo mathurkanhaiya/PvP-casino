@@ -4,7 +4,7 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base.json ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base.json .npmrc ./
 
 COPY lib/ ./lib/
 COPY artifacts/api-server/ ./artifacts/api-server/
